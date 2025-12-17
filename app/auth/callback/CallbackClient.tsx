@@ -7,17 +7,18 @@ import { createClient } from "@/lib/supabase/client";
 export default function CallbackClient() {
   const router = useRouter();
   const params = useSearchParams();
-  const supabase = createClient();
 
   useEffect(() => {
-    async function run() {
-      // 1) URL query (?code=...)
+    (async () => {
+      const supabase = createClient();
+
+      // 1) ?code=...
       const code = params.get("code");
       if (code) {
         await supabase.auth.exchangeCodeForSession(code);
       }
 
-      // 2) URL hash (#access_token=...)
+      // 2) #access_token=...&refresh_token=...
       const hash = window.location.hash?.slice(1) || "";
       const hp = new URLSearchParams(hash);
       const access_token = hp.get("access_token");
@@ -29,10 +30,8 @@ export default function CallbackClient() {
 
       const next = params.get("next") ?? "/dashboard";
       router.replace(next);
-    }
-
-    run();
-  }, []);
+    })();
+  }, [router, params]);
 
   return <p style={{ padding: 24 }}>Oturum açılıyor...</p>;
 }
