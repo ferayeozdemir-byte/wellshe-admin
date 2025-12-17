@@ -1,0 +1,13 @@
+{
+  "typescript.tsserver.exclude": ["**/.next/**", "**/node_modules/**"],
+  "files.watcherExclude": {
+    "**/.next/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/.next/**": true,
+    "**/node_modules/**": true
+  },
+  "typescript.validate.enable": false,
+  "javascript.validate.enable": false
+}
