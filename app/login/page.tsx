@@ -1,7 +1,7 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,14 +14,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  // 🔴 KRİTİK KISIM BURASI
+  // 🔴 KRİTİK: Reset link hash ile gelirse callback'e yönlendir
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash.includes("access_token=")) {
       window.location.href =
         "/auth/callback?next=/update-password" + window.location.hash;
     }
   }, []);
-  // 🔴 KRİTİK KISIM BİTTİ
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
