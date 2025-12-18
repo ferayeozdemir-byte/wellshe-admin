@@ -15,15 +15,14 @@ export default async function WeeklyEditPage({
 }: {
   params: { id: string };
 }) {
-  console.log("EDIT PARAMS:", params);
-
   await requireAdmin();
 
+  // Next bazen params’i farklı şekilde verebiliyor diye güvenli alıyoruz
   const p: any = await Promise.resolve(params as any);
-const id =
-  typeof p?.id === "string" ? p.id : Array.isArray(p?.id) ? p.id[0] : undefined;
+  const id =
+    typeof p?.id === "string" ? p.id : Array.isArray(p?.id) ? p.id[0] : undefined;
 
-if (!id || !isUuid(id)) {
+  if (!id || !isUuid(id)) {
     return (
       <div style={{ padding: 24 }}>
         <h1>Weekly Edit</h1>
@@ -55,7 +54,7 @@ if (!id || !isUuid(id)) {
   }
 
   return (
-    <div style={{ padding: 24, display: "grid", gap: 16 }}>
+    <div style={{ padding: 24, display: "grid", gap: 16, maxWidth: 900 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Weekly Edit</h1>
         <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
@@ -63,8 +62,8 @@ if (!id || !isUuid(id)) {
         </Link>
       </div>
 
+      {/* ✅ Form TEK parça: bütün inputlar formun İÇİNDE */}
       <form action={updateWeeklyItem} style={card}>
-        {/* id mutlaka gitsin */}
         <input type="hidden" name="id" value={row.id} />
 
         <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10 }}>
@@ -115,7 +114,6 @@ const card: React.CSSProperties = {
   borderRadius: 12,
   padding: 14,
   background: "#fff",
-  maxWidth: 900,
 };
 
 const label: React.CSSProperties = {

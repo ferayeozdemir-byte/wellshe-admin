@@ -5,7 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createWeeklyItem } from "./actions";
 import DeleteButton from "./DeleteButton";
 
-export default async function WeeklyPage() {
+export default async function WeeklyPage({
+  searchParams,
+}: {
+  searchParams?: { updated?: string; created?: string; deleted?: string };
+}) {
   await requireAdmin();
   const supabase = await createClient();
 
@@ -23,6 +27,17 @@ export default async function WeeklyPage() {
         </Link>
       </div>
 
+      {/* ✅ Başarı mesajları */}
+      {searchParams?.created === "1" && (
+        <p style={{ color: "green", fontWeight: 700, margin: 0 }}>Eklendi ✅</p>
+      )}
+      {searchParams?.updated === "1" && (
+        <p style={{ color: "green", fontWeight: 700, margin: 0 }}>Kaydedildi ✅</p>
+      )}
+      {searchParams?.deleted === "1" && (
+        <p style={{ color: "green", fontWeight: 700, margin: 0 }}>Silindi ✅</p>
+      )}
+
       {error && <p style={{ color: "crimson" }}>DB Error: {error.message}</p>}
 
       <form action={createWeeklyItem} style={card}>
@@ -35,10 +50,20 @@ export default async function WeeklyPage() {
           </select>
 
           <label style={label}>Hafta etiketi</label>
-          <input name="week_label" placeholder="örn: 24–30 Kasım 2025" required style={input} />
+          <input
+            name="week_label"
+            placeholder="örn: 24–30 Kasım 2025"
+            required
+            style={input}
+          />
 
           <label style={label}>Teaser</label>
-          <input name="teaser" placeholder="Ana sayfada gözükecek kısa cümle" required style={input} />
+          <input
+            name="teaser"
+            placeholder="Ana sayfada gözükecek kısa cümle"
+            required
+            style={input}
+          />
 
           <label style={label}>Başlık</label>
           <input name="title" placeholder="Kart başlığı" required style={input} />
@@ -95,7 +120,6 @@ export default async function WeeklyPage() {
                 </td>
                 <td style={td}>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {/* ✅ /edit YOK */}
                     <Link href={`/dashboard/weekly/${r.id}/edit`} style={btn}>
                       Edit
                     </Link>

@@ -2,6 +2,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,6 +29,7 @@ export async function createWeeklyItem(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/weekly");
+  redirect("/dashboard/weekly?created=1");
 }
 
 export async function updateWeeklyItem(formData: FormData) {
@@ -52,7 +54,9 @@ export async function updateWeeklyItem(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/weekly");
-  revalidatePath(`/dashboard/weekly/${id}`);
+  revalidatePath(`/dashboard/weekly/${id}/edit`);
+
+  redirect("/dashboard/weekly?updated=1");
 }
 
 export async function deleteWeeklyItem(formData: FormData) {
@@ -66,4 +70,5 @@ export async function deleteWeeklyItem(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/weekly");
+  redirect("/dashboard/weekly?deleted=1");
 }
