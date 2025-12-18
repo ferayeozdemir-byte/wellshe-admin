@@ -1,24 +1,21 @@
-// app/dashboard/weekly/[id]/edit/page.tsx
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
-import DeleteButton from "../../DeleteButton";
 import { updateWeeklyItem } from "../../actions";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
 
-type PageProps = {
+export default async function WeeklyEditPage({
+  params,
+}: {
   params: { id?: string };
-};
-
-export default async function WeeklyEditPage({ params }: PageProps) {
+}) {
   await requireAdmin();
-
   const id = params?.id;
 
-  // ✅ "undefined" / boş id durumunda DB'ye gitme
-  if (!id || id === "undefined") {
+  if (!id || !isUuid(id)) {
     return (
       <div style={{ padding: 24 }}>
         <h1 style={{ marginTop: 0 }}>Weekly Edit</h1>
@@ -34,13 +31,13 @@ export default async function WeeklyEditPage({ params }: PageProps) {
 
   const supabase = await createClient();
 
-  const { data: row, error } = await supabase
+  const { data: item, error } = await supabase
     .from("weekly_items")
     .select("id, category, week_label, teaser, title, description, status, created_at")
     .eq("id", id)
     .single();
 
-  if (error || !row) {
+  if (error || !item) {
     return (
       <div style={{ padding: 24 }}>
         <h1 style={{ marginTop: 0 }}>Weekly Edit</h1>
@@ -55,84 +52,96 @@ export default async function WeeklyEditPage({ params }: PageProps) {
   }
 
   return (
-    <div style={{ padding: 24, display: "grid", gap: 14, maxWidth: 720 }}>
+    <div style={{ padding: 24, display: "grid", gap: 16, maxWidth: 900 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Weekly Edit</h1>
-
         <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
           ← Weekly
         </Link>
-
-        <div style={{ marginLeft: "auto" }}>
-          <DeleteButton id={row.id} />
-        </div>
       </div>
 
-      <form action={updateWeeklyItem} style={{ display: "grid", gap: 10 }}>
-        <input type="hidden" name="id" value={row.id} />
+      <form action={updateWeeklyItem} style={card}>
+        <input type="hidden" name="id" value={item.id} />
 
-        <label style={label}>
-          Category
-          <select name="category" defaultValue={row.category ?? "movie"} style={input} required>
+        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10 }}>
+          <label style={label}>Kategori</label>
+          <select name="category" defaultValue={item.category} required style={input}>
             <option value="movie">movie (Dizi/Film)</option>
             <option value="music">music (Müzik)</option>
             <option value="book">book (Kitap)</option>
           </select>
-        </label>
 
-        <label style={label}>
-          Week Label
-          <input name="week_label" defaultValue={row.week_label ?? ""} style={input} required />
-        </label>
+          <label style={label}>Hafta etiketi</label>
+          <input
+            name="week_label"
+            defaultValue={item.week_label ?? ""}
+            required
+            style={input}
+          />
 
-        <label style={label}>
-          Teaser
-          <input name="teaser" defaultValue={row.teaser ?? ""} style={input} required />
-        </label>
+          <label style={label}>Teaser</label>
+          <input name="teaser" defaultValue={item.teaser ?? ""} required style={input} />
 
-        <label style={label}>
-          Title
-          <input name="title" defaultValue={row.title ?? ""} style={input} required />
-        </label>
+          <label style={label}>Başlık</label>
+          <input name="title" defaultValue={item.title ?? ""} required style={input} />
 
-        <label style={label}>
-          Description
+          <label style={label}>Açıklama</label>
           <textarea
             name="description"
-            defaultValue={row.description ?? ""}
-            style={{ ...input, minHeight: 140 }}
+            defaultValue={item.description ?? ""}
             required
+            rows={6}
+            style={textarea}
           />
-        </label>
 
-        <label style={label}>
-          Status
-          <select name="status" defaultValue={row.status ?? "draft"} style={input} required>
+          <label style={label}>Durum</label>
+          <select name="status" defaultValue={item.status ?? "draft"} required style={input}>
             <option value="draft">draft</option>
             <option value="published">published</option>
           </select>
-        </label>
+        </div>
 
-        <button type="submit" style={btnPrimary}>
-          Kaydet
-        </button>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <button type="submit" style={btnPrimary}>
+            Save
+          </button>
+        </div>
       </form>
+
+      <div style={{ fontSize: 12, opacity: 0.7 }}>
+        ID: {item.id} • Created:{" "}
+        {item.created_at ? new Date(item.created_at).toLocaleString("tr-TR") : "-"}
+      </div>
     </div>
   );
 }
 
+const card: React.CSSProperties = {
+  border: "1px solid #eee",
+  borderRadius: 12,
+  padding: 14,
+  background: "#fff",
+};
+
 const label: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
+  fontSize: 13,
   fontWeight: 700,
+  paddingTop: 8,
 };
 
 const input: React.CSSProperties = {
-  width: "100%",
   padding: 10,
   borderRadius: 10,
   border: "1px solid #ddd",
-  fontWeight: 500,
+  width: "100%",
+};
+
+const textarea: React.CSSProperties = {
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  width: "100%",
+  resize: "vertical",
 };
 
 const btnPrimary: React.CSSProperties = {

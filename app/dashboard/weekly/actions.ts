@@ -1,58 +1,55 @@
-// app/dashboard/weekly/actions.ts
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
+
+function getStr(formData: FormData, key: string) {
+  return String(formData.get(key) ?? "").trim();
+}
 
 export async function createWeeklyItem(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
 
-  const category = String(formData.get("category") ?? "").trim();
-  const week_label = String(formData.get("week_label") ?? "").trim();
-  const teaser = String(formData.get("teaser") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const status = String(formData.get("status") ?? "draft").trim();
+  const category = getStr(formData, "category"); // movie|music|book
+  const week_label = getStr(formData, "week_label");
+  const teaser = getStr(formData, "teaser");
+  const title = getStr(formData, "title");
+  const description = getStr(formData, "description");
+  const status = getStr(formData, "status") || "draft";
 
   if (!category || !week_label || !teaser || !title || !description) {
     throw new Error("Zorunlu alanlar eksik.");
   }
 
-  const { data, error } = await supabase
-    .from("weekly_items")
-    .insert({
-      category,
-      week_label,
-      teaser,
-      title,
-      description,
-      status,
-    })
-    .select("id")
-    .single();
+  const { error } = await supabase.from("weekly_items").insert({
+    category,
+    week_label,
+    teaser,
+    title,
+    description,
+    status,
+  });
 
-  if (error || !data) throw new Error(error?.message ?? "Insert başarısız");
+  if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/weekly");
-  redirect(`/dashboard/weekly/${data.id}/edit`);
 }
 
 export async function updateWeeklyItem(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
 
-  const id = String(formData.get("id") ?? "").trim();
+  const id = getStr(formData, "id");
   if (!id) throw new Error("ID eksik.");
 
-  const category = String(formData.get("category") ?? "").trim();
-  const week_label = String(formData.get("week_label") ?? "").trim();
-  const teaser = String(formData.get("teaser") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const status = String(formData.get("status") ?? "draft").trim();
+  const category = getStr(formData, "category");
+  const week_label = getStr(formData, "week_label");
+  const teaser = getStr(formData, "teaser");
+  const title = getStr(formData, "title");
+  const description = getStr(formData, "description");
+  const status = getStr(formData, "status") || "draft";
 
   if (!category || !week_label || !teaser || !title || !description) {
     throw new Error("Zorunlu alanlar eksik.");
@@ -60,14 +57,7 @@ export async function updateWeeklyItem(formData: FormData) {
 
   const { error } = await supabase
     .from("weekly_items")
-    .update({
-      category,
-      week_label,
-      teaser,
-      title,
-      description,
-      status,
-    })
+    .update({ category, week_label, teaser, title, description, status })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
@@ -80,12 +70,11 @@ export async function deleteWeeklyItem(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
 
-  const id = String(formData.get("id") ?? "").trim();
+  const id = getStr(formData, "id");
   if (!id) throw new Error("ID eksik.");
 
   const { error } = await supabase.from("weekly_items").delete().eq("id", id);
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/weekly");
-  redirect("/dashboard/weekly");
 }

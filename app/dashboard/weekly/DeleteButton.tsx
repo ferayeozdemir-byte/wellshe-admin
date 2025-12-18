@@ -1,4 +1,3 @@
-// app/dashboard/weekly/DeleteButton.tsx
 "use client";
 
 import { deleteWeeklyItem } from "./actions";
@@ -8,7 +7,7 @@ export default function DeleteButton({ id }: { id: string }) {
     <form
       action={deleteWeeklyItem}
       onSubmit={(e) => {
-        if (!confirm("Bu haftalık öneriyi silmek istediğinize emin misiniz?")) {
+        if (!confirm("Bu weekly önerisini silmek istediğinize emin misiniz?")) {
           e.preventDefault();
         }
       }}
