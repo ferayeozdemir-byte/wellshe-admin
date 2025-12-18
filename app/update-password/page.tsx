@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { updatePassword } from "./actions";
 
 export default function UpdatePasswordPage({

@@ -17,10 +17,11 @@ export default function DashboardPage() {
     <div style={{ padding: 24 }}>
       <h1>Dashboard</h1>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+      <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
         <Link href="/dashboard/articles">Articles</Link>
         <Link href="/dashboard/assets">Assets</Link>
         <Link href="/dashboard/categories">Categories</Link>
+        <Link href="/dashboard/weekly">Weekly</Link>
       </div>
 
       <button onClick={logout} style={{ marginTop: 24 }}>
