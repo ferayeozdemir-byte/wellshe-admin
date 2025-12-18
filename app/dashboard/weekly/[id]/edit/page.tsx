@@ -15,7 +15,8 @@ export default async function WeeklyEditPage({
 }) {
   await requireAdmin();
 
-  const id = params?.id;
+  const p = await Promise.resolve(params); // ✅ hem object hem Promise destekler
+  const id = p?.id as string | undefined;
   if (!id || !isUuid(id)) {
     return (
       <div style={{ padding: 24 }}>
