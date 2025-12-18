@@ -13,6 +13,8 @@ export default async function WeeklyEditPage({
 }: {
   params: { id: string };
 }) {
+  console.log("EDIT PARAMS:", params);
+  
   await requireAdmin();
 
   const p = await Promise.resolve(params); // ✅ hem object hem Promise destekler
