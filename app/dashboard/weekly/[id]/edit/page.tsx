@@ -1,3 +1,4 @@
+// app/dashboard/weekly/[id]/edit/page.tsx
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
@@ -10,43 +11,38 @@ function isUuid(v: string) {
 export default async function WeeklyEditPage({
   params,
 }: {
-  params: { id?: string };
+  params: { id: string };
 }) {
   await requireAdmin();
-  const id = params?.id;
 
+  const id = params?.id;
   if (!id || !isUuid(id)) {
     return (
       <div style={{ padding: 24 }}>
-        <h1 style={{ marginTop: 0 }}>Weekly Edit</h1>
+        <h1>Weekly Edit</h1>
         <p style={{ color: "crimson", fontWeight: 700 }}>
           Geçersiz ID. Bu sayfaya hatalı bir link ile gelinmiş.
         </p>
-        <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
-          ← Weekly
-        </Link>
+        <Link href="/dashboard/weekly">← Weekly</Link>
       </div>
     );
   }
 
   const supabase = await createClient();
-
-  const { data: item, error } = await supabase
+  const { data: row, error } = await supabase
     .from("weekly_items")
-    .select("id, category, week_label, teaser, title, description, status, created_at")
+    .select("id, category, week_label, teaser, title, description, status")
     .eq("id", id)
     .single();
 
-  if (error || !item) {
+  if (error || !row) {
     return (
       <div style={{ padding: 24 }}>
-        <h1 style={{ marginTop: 0 }}>Weekly Edit</h1>
+        <h1>Weekly Edit</h1>
         <p style={{ color: "crimson", fontWeight: 700 }}>
-          Kayıt bulunamadı / hata: {error?.message ?? "Bulunamadı"}
+          Kayıt bulunamadı / hata: {error?.message ?? "unknown"}
         </p>
-        <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
-          ← Weekly
-        </Link>
+        <Link href="/dashboard/weekly">← Weekly</Link>
       </div>
     );
   }
@@ -60,96 +56,42 @@ export default async function WeeklyEditPage({
         </Link>
       </div>
 
-      <form action={updateWeeklyItem} style={card}>
-        <input type="hidden" name="id" value={item.id} />
+      <form action={updateWeeklyItem} style={{ display: "grid", gap: 10 }}>
+        <input type="hidden" name="id" value={row.id} />
 
-        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10 }}>
-          <label style={label}>Kategori</label>
-          <select name="category" defaultValue={item.category} required style={input}>
-            <option value="movie">movie (Dizi/Film)</option>
-            <option value="music">music (Müzik)</option>
-            <option value="book">book (Kitap)</option>
-          </select>
+        {/* ✅ updateWeeklyItem bunları da beklediği için formda MUTLAKA olmalı */}
+        <label>Kategori</label>
+        <select name="category" defaultValue={row.category} required>
+          <option value="movie">movie (Dizi/Film)</option>
+          <option value="music">music (Müzik)</option>
+          <option value="book">book (Kitap)</option>
+        </select>
 
-          <label style={label}>Hafta etiketi</label>
-          <input
-            name="week_label"
-            defaultValue={item.week_label ?? ""}
-            required
-            style={input}
-          />
+        <label>Hafta etiketi</label>
+        <input name="week_label" defaultValue={row.week_label ?? ""} required />
 
-          <label style={label}>Teaser</label>
-          <input name="teaser" defaultValue={item.teaser ?? ""} required style={input} />
+        <label>Teaser</label>
+        <input name="teaser" defaultValue={row.teaser ?? ""} required />
 
-          <label style={label}>Başlık</label>
-          <input name="title" defaultValue={item.title ?? ""} required style={input} />
+        <label>Başlık</label>
+        <input name="title" defaultValue={row.title ?? ""} required />
 
-          <label style={label}>Açıklama</label>
-          <textarea
-            name="description"
-            defaultValue={item.description ?? ""}
-            required
-            rows={6}
-            style={textarea}
-          />
+        <label>Açıklama</label>
+        <textarea
+          name="description"
+          defaultValue={row.description ?? ""}
+          rows={6}
+          required
+        />
 
-          <label style={label}>Durum</label>
-          <select name="status" defaultValue={item.status ?? "draft"} required style={input}>
-            <option value="draft">draft</option>
-            <option value="published">published</option>
-          </select>
-        </div>
+        <label>Durum</label>
+        <select name="status" defaultValue={row.status ?? "draft"} required>
+          <option value="draft">draft</option>
+          <option value="published">published</option>
+        </select>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-          <button type="submit" style={btnPrimary}>
-            Save
-          </button>
-        </div>
+        <button type="submit">Kaydet</button>
       </form>
-
-      <div style={{ fontSize: 12, opacity: 0.7 }}>
-        ID: {item.id} • Created:{" "}
-        {item.created_at ? new Date(item.created_at).toLocaleString("tr-TR") : "-"}
-      </div>
     </div>
   );
 }
-
-const card: React.CSSProperties = {
-  border: "1px solid #eee",
-  borderRadius: 12,
-  padding: 14,
-  background: "#fff",
-};
-
-const label: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
-  paddingTop: 8,
-};
-
-const input: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  width: "100%",
-};
-
-const textarea: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  width: "100%",
-  resize: "vertical",
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer",
-  fontWeight: 700,
-};
