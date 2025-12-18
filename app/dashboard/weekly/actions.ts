@@ -6,29 +6,20 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 
-function norm(v: FormDataEntryValue | null) {
-  return String(v ?? "").trim();
-}
-
-const ALLOWED = new Set(["movie", "music", "book"]);
-const ALLOWED_STATUS = new Set(["draft", "published"]);
-
 export async function createWeeklyItem(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
 
-  const category = norm(formData.get("category"));
-  const week_label = norm(formData.get("week_label"));
-  const teaser = norm(formData.get("teaser"));
-  const title = norm(formData.get("title"));
-  const description = norm(formData.get("description"));
-  const status = norm(formData.get("status")) || "draft";
+  const category = String(formData.get("category") ?? "").trim();
+  const week_label = String(formData.get("week_label") ?? "").trim();
+  const teaser = String(formData.get("teaser") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const status = String(formData.get("status") ?? "draft").trim();
 
-  if (!ALLOWED.has(category)) throw new Error("Geçersiz category");
-  if (!week_label || !teaser || !title || !description) {
-    throw new Error("Tüm alanlar zorunlu");
+  if (!category || !week_label || !teaser || !title || !description) {
+    throw new Error("Zorunlu alanlar eksik.");
   }
-  if (!ALLOWED_STATUS.has(status)) throw new Error("Geçersiz status");
 
   const { data, error } = await supabase
     .from("weekly_items")
@@ -43,42 +34,28 @@ export async function createWeeklyItem(formData: FormData) {
     .select("id")
     .single();
 
-  if (error || !data) throw new Error(error?.message || "Weekly item oluşturulamadı");
+  if (error || !data) throw new Error(error?.message ?? "Insert başarısız");
 
   revalidatePath("/dashboard/weekly");
   redirect(`/dashboard/weekly/${data.id}/edit`);
-}
-
-export async function deleteWeeklyItem(formData: FormData) {
-  await requireAdmin();
-  const supabase = await createClient();
-
-  const id = norm(formData.get("id"));
-  if (!id) throw new Error("id zorunlu");
-
-  const { error } = await supabase.from("weekly_items").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/dashboard/weekly");
 }
 
 export async function updateWeeklyItem(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
 
-  const id = norm(formData.get("id"));
-  const category = norm(formData.get("category"));
-  const week_label = norm(formData.get("week_label"));
-  const teaser = norm(formData.get("teaser"));
-  const title = norm(formData.get("title"));
-  const description = norm(formData.get("description"));
-  const status = norm(formData.get("status"));
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) throw new Error("ID eksik.");
 
-  if (!id) throw new Error("id zorunlu");
-  if (!ALLOWED.has(category)) throw new Error("Geçersiz category");
-  if (!ALLOWED_STATUS.has(status)) throw new Error("Geçersiz status");
-  if (!week_label || !teaser || !title || !description) {
-    throw new Error("Tüm alanlar zorunlu");
+  const category = String(formData.get("category") ?? "").trim();
+  const week_label = String(formData.get("week_label") ?? "").trim();
+  const teaser = String(formData.get("teaser") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const status = String(formData.get("status") ?? "draft").trim();
+
+  if (!category || !week_label || !teaser || !title || !description) {
+    throw new Error("Zorunlu alanlar eksik.");
   }
 
   const { error } = await supabase
@@ -97,4 +74,18 @@ export async function updateWeeklyItem(formData: FormData) {
 
   revalidatePath("/dashboard/weekly");
   revalidatePath(`/dashboard/weekly/${id}/edit`);
+}
+
+export async function deleteWeeklyItem(formData: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) throw new Error("ID eksik.");
+
+  const { error } = await supabase.from("weekly_items").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dashboard/weekly");
+  redirect("/dashboard/weekly");
 }

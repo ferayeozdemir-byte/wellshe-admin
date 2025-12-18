@@ -1,120 +1,138 @@
+// app/dashboard/weekly/[id]/edit/page.tsx
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
+import DeleteButton from "../../DeleteButton";
 import { updateWeeklyItem } from "../../actions";
 
-export default async function WeeklyEditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type PageProps = {
+  params: { id?: string };
+};
+
+export default async function WeeklyEditPage({ params }: PageProps) {
   await requireAdmin();
-  const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("weekly_items")
-    .select("id, category, week_label, teaser, title, description, status, created_at")
-    .eq("id", params.id)
-    .single();
+  const id = params?.id;
 
-  if (error || !data) {
+  // ✅ "undefined" / boş id durumunda DB'ye gitme
+  if (!id || id === "undefined") {
     return (
       <div style={{ padding: 24 }}>
-        <h2>Weekly Edit</h2>
-        <p style={{ color: "crimson" }}>
-          Kayıt bulunamadı / hata: {error?.message ?? "unknown"}
+        <h1 style={{ marginTop: 0 }}>Weekly Edit</h1>
+        <p style={{ color: "crimson", fontWeight: 700 }}>
+          Geçersiz ID. Bu sayfaya hatalı bir link ile gelinmiş.
         </p>
-        <Link href="/dashboard/weekly">← Weekly</Link>
+        <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
+          ← Weekly
+        </Link>
+      </div>
+    );
+  }
+
+  const supabase = await createClient();
+
+  const { data: row, error } = await supabase
+    .from("weekly_items")
+    .select("id, category, week_label, teaser, title, description, status, created_at")
+    .eq("id", id)
+    .single();
+
+  if (error || !row) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h1 style={{ marginTop: 0 }}>Weekly Edit</h1>
+        <p style={{ color: "crimson", fontWeight: 700 }}>
+          Kayıt bulunamadı / hata: {error?.message ?? "Bulunamadı"}
+        </p>
+        <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
+          ← Weekly
+        </Link>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 24, display: "grid", gap: 16 }}>
+    <div style={{ padding: 24, display: "grid", gap: 14, maxWidth: 720 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Edit Weekly Item</h1>
+        <h1 style={{ margin: 0 }}>Weekly Edit</h1>
+
         <Link href="/dashboard/weekly" style={{ textDecoration: "none" }}>
           ← Weekly
         </Link>
+
+        <div style={{ marginLeft: "auto" }}>
+          <DeleteButton id={row.id} />
+        </div>
       </div>
 
-      <form action={updateWeeklyItem} style={card}>
-        <input type="hidden" name="id" value={data.id} />
+      <form action={updateWeeklyItem} style={{ display: "grid", gap: 10 }}>
+        <input type="hidden" name="id" value={row.id} />
 
-        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10 }}>
-          <label style={label}>Kategori</label>
-          <select name="category" defaultValue={data.category} required style={input}>
+        <label style={label}>
+          Category
+          <select name="category" defaultValue={row.category ?? "movie"} style={input} required>
             <option value="movie">movie (Dizi/Film)</option>
             <option value="music">music (Müzik)</option>
             <option value="book">book (Kitap)</option>
           </select>
+        </label>
 
-          <label style={label}>Hafta etiketi</label>
-          <input name="week_label" defaultValue={data.week_label} required style={input} />
+        <label style={label}>
+          Week Label
+          <input name="week_label" defaultValue={row.week_label ?? ""} style={input} required />
+        </label>
 
-          <label style={label}>Teaser</label>
-          <input name="teaser" defaultValue={data.teaser} required style={input} />
+        <label style={label}>
+          Teaser
+          <input name="teaser" defaultValue={row.teaser ?? ""} style={input} required />
+        </label>
 
-          <label style={label}>Başlık</label>
-          <input name="title" defaultValue={data.title} required style={input} />
+        <label style={label}>
+          Title
+          <input name="title" defaultValue={row.title ?? ""} style={input} required />
+        </label>
 
-          <label style={label}>Açıklama</label>
+        <label style={label}>
+          Description
           <textarea
             name="description"
-            defaultValue={data.description}
+            defaultValue={row.description ?? ""}
+            style={{ ...input, minHeight: 140 }}
             required
-            rows={6}
-            style={textarea}
           />
+        </label>
 
-          <label style={label}>Durum</label>
-          <select name="status" defaultValue={data.status} required style={input}>
+        <label style={label}>
+          Status
+          <select name="status" defaultValue={row.status ?? "draft"} style={input} required>
             <option value="draft">draft</option>
             <option value="published">published</option>
           </select>
-        </div>
+        </label>
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            created_at:{" "}
-            {data.created_at ? new Date(data.created_at).toLocaleString("tr-TR") : "-"}
-          </div>
-
-          <button type="submit" style={btnPrimary}>
-            Save
-          </button>
-        </div>
+        <button type="submit" style={btnPrimary}>
+          Kaydet
+        </button>
       </form>
     </div>
   );
 }
 
-const card: React.CSSProperties = {
-  border: "1px solid #eee",
-  borderRadius: 12,
-  padding: 14,
-  background: "#fff",
-};
-
 const label: React.CSSProperties = {
-  fontSize: 13,
+  display: "grid",
+  gap: 6,
   fontWeight: 700,
-  paddingTop: 8,
 };
 
 const input: React.CSSProperties = {
+  width: "100%",
   padding: 10,
   borderRadius: 10,
   border: "1px solid #ddd",
-  width: "100%",
-};
-
-const textarea: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  width: "100%",
-  resize: "vertical",
+  fontWeight: 500,
 };
 
 const btnPrimary: React.CSSProperties = {
