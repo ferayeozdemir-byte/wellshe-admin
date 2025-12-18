@@ -19,8 +19,11 @@ export default async function WeeklyEditPage({
 
   await requireAdmin();
 
-  const id = params?.id;
-  if (!id || !isUuid(id)) {
+  const p: any = await Promise.resolve(params as any);
+const id =
+  typeof p?.id === "string" ? p.id : Array.isArray(p?.id) ? p.id[0] : undefined;
+
+if (!id || !isUuid(id)) {
     return (
       <div style={{ padding: 24 }}>
         <h1>Weekly Edit</h1>
