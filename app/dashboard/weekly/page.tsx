@@ -1,3 +1,4 @@
+// app/dashboard/weekly/page.tsx
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
@@ -34,20 +35,10 @@ export default async function WeeklyPage() {
           </select>
 
           <label style={label}>Hafta etiketi</label>
-          <input
-            name="week_label"
-            placeholder="örn: 24–30 Kasım 2025"
-            required
-            style={input}
-          />
+          <input name="week_label" placeholder="örn: 24–30 Kasım 2025" required style={input} />
 
           <label style={label}>Teaser</label>
-          <input
-            name="teaser"
-            placeholder="Ana sayfada gözükecek kısa cümle"
-            required
-            style={input}
-          />
+          <input name="teaser" placeholder="Ana sayfada gözükecek kısa cümle" required style={input} />
 
           <label style={label}>Başlık</label>
           <input name="title" placeholder="Kart başlığı" required style={input} />
@@ -104,6 +95,7 @@ export default async function WeeklyPage() {
                 </td>
                 <td style={td}>
                   <div style={{ display: "flex", gap: 8 }}>
+                    {/* ✅ /edit YOK */}
                     <Link href={`/dashboard/weekly/${r.id}/edit`} style={btn}>
                       Edit
                     </Link>
@@ -134,11 +126,7 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
-const label: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
-  paddingTop: 8,
-};
+const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, paddingTop: 8 };
 
 const input: React.CSSProperties = {
   padding: 10,
