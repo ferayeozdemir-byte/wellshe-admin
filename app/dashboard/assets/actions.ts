@@ -79,11 +79,8 @@ export async function uploadAsset(formData: FormData): Promise<void> {
 
   const path = `articles/${yyyy}-${mm}/${id}${ext}`;
 
-  const arrayBuffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-
-  // 1) Storage upload
-  const { error: upErr } = await supabase.storage.from(bucket).upload(path, bytes, {
+  // 1) Storage upload (File'ı direkt gönder)
+  const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
     contentType: file.type || "application/octet-stream",
     upsert: false,
   });
@@ -94,7 +91,7 @@ export async function uploadAsset(formData: FormData): Promise<void> {
     bucket,
     path,
     content_type: file.type || null,
-    bytes: bytes.byteLength,
+    bytes: file.size,
   });
   if (insErr) throw new Error(insErr.message);
 
