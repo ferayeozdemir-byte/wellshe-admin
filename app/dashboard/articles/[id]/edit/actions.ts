@@ -1,15 +1,14 @@
-// app/dashboard/articles/[id]/edit/actions.ts
 "use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 function slugifyTR(input: string) {
   const s = (input ?? "").trim().toLowerCase();
 
-  // Türkçe karakterleri sadeleştir
   const mapped = s
     .replaceAll("ğ", "g")
     .replaceAll("ü", "u")
@@ -19,10 +18,9 @@ function slugifyTR(input: string) {
     .replaceAll("ö", "o")
     .replaceAll("ç", "c");
 
-  // Harf/rakam dışını tire yap
   const slug = mapped
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "") // diacritics
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-+/g, "-");
@@ -36,7 +34,7 @@ async function ensureUniqueSlugTR(
   baseSlug: string
 ) {
   let candidate = baseSlug;
-  // makul bir limit
+
   for (let i = 0; i < 50; i++) {
     const { data, error } = await supabase
       .from("article_translations")
@@ -47,14 +45,32 @@ async function ensureUniqueSlugTR(
       .limit(1);
 
     if (error) throw new Error(error.message);
-
     if (!data || data.length === 0) return candidate;
 
-    candidate = `${baseSlug}-${i + 2}`; // -2, -3...
+    candidate = `${baseSlug}-${i + 2}`;
   }
 
-  // 50 denemede bile doluysa artık çok sıra dışı bir durum
   return `${baseSlug}-${Date.now()}`;
+}
+
+function getAdminSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL eksik (Vercel env).");
+  if (!serviceKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY eksik (Vercel env).");
+
+  return createAdminClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+}
+
+function extFromFilename(name: string) {
+  const idx = name.lastIndexOf(".");
+  if (idx === -1) return "";
+  const ext = name.slice(idx).toLowerCase();
+  if (ext.length > 10) return "";
+  return ext;
 }
 
 export async function updateArticleTR(formData: FormData) {
@@ -72,6 +88,13 @@ export async function updateArticleTR(formData: FormData) {
       ? String(category_id_raw).trim()
       : null;
 
+  // ✅ cover_asset_id (dropdown’tan gelir)
+  const cover_asset_id_raw = formData.get("cover_asset_id");
+  const cover_asset_id =
+    cover_asset_id_raw && String(cover_asset_id_raw).trim() !== ""
+      ? String(cover_asset_id_raw).trim()
+      : null;
+
   const title = String(formData.get("title") || "").trim();
   const summary = String(formData.get("summary") || "").trim();
   const content_html = String(formData.get("content_html") || "").trim();
@@ -80,18 +103,15 @@ export async function updateArticleTR(formData: FormData) {
   let seo_title = String(formData.get("seo_title") || "").trim();
   let seo_description = String(formData.get("seo_description") || "").trim();
 
-  // ✅ Otomasyonlar (boşsa doldur)
   if (!slug && title) slug = slugifyTR(title);
   if (!seo_title && title) seo_title = title;
   if (!seo_description && summary) seo_description = summary;
 
-  // slug çakışmasını engelle (TR için)
   if (slug) {
-    const base = slugifyTR(slug); // kullanıcı yazsa bile normalize et
+    const base = slugifyTR(slug);
     slug = await ensureUniqueSlugTR(supabase, id, base);
   }
 
-  // ✅ Published validasyonu (category opsiyonel kalsın)
   if (status === "published") {
     const missing: string[] = [];
     if (!title) missing.push("Başlık (TR)");
@@ -100,16 +120,14 @@ export async function updateArticleTR(formData: FormData) {
     if (!slug) missing.push("Slug (TR)");
 
     if (missing.length) {
-      throw new Error(
-        `Published için zorunlu alanlar boş: ${missing.join(", ")}`
-      );
+      throw new Error(`Published için zorunlu alanlar boş: ${missing.join(", ")}`);
     }
   }
 
-  // 1) articles güncelle (status + category)
+  // 1) articles update (status + category + cover)
   const { error: aErr } = await supabase
     .from("articles")
-    .update({ status, category_id })
+    .update({ status, category_id, cover_asset_id })
     .eq("id", id);
 
   if (aErr) throw new Error(aErr.message);
@@ -133,4 +151,65 @@ export async function updateArticleTR(formData: FormData) {
 
   revalidatePath("/dashboard/articles");
   redirect("/dashboard/articles");
+}
+
+// ✅ Upload eder → assets’e kaydeder → article.cover_asset_id’ye bağlar
+export async function uploadCoverForArticle(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const admin = getAdminSupabase();
+
+  const article_id = String(formData.get("article_id") || "").trim();
+  if (!article_id) throw new Error("article_id eksik");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("Dosya seçilmedi.");
+
+  const bucket = "media";
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+
+  const ext = extFromFilename(file.name) || "";
+  const fileId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const path = `covers/${yyyy}-${mm}/${fileId}${ext}`;
+
+  // 1) Storage upload
+  const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+    upsert: false,
+  });
+  if (upErr) throw new Error(upErr.message);
+
+  // 2) assets insert + id al
+  const { data: inserted, error: insErr } = await admin
+    .from("assets")
+    .insert({
+      bucket,
+      path,
+      content_type: file.type || null,
+      bytes: file.size,
+    })
+    .select("id")
+    .single();
+
+  if (insErr) throw new Error(insErr.message);
+  if (!inserted?.id) throw new Error("Asset ID alınamadı.");
+
+  // 3) article cover bağla
+  const { error: artErr } = await admin
+    .from("articles")
+    .update({ cover_asset_id: inserted.id })
+    .eq("id", article_id);
+
+  if (artErr) throw new Error(artErr.message);
+
+  revalidatePath(`/dashboard/articles/${article_id}/edit`);
+  revalidatePath("/dashboard/articles");
+
+  redirect(`/dashboard/articles/${article_id}/edit`);
 }

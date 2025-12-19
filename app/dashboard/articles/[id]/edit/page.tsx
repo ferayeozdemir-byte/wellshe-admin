@@ -2,10 +2,11 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { updateArticleTR } from "./actions";
+import { updateArticleTR, uploadCoverForArticle } from "./actions";
 import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };
+type AssetMiniRow = { id: string; bucket: string; path: string; created_at: string | null };
 
 export default async function EditArticlePage({
   params,
@@ -19,7 +20,7 @@ export default async function EditArticlePage({
 
   const { data: article, error: aErr } = await supabase
     .from("articles")
-    .select("id, status, created_at, category_id")
+    .select("id, status, created_at, category_id, cover_asset_id")
     .eq("id", id)
     .single();
 
@@ -37,6 +38,12 @@ export default async function EditArticlePage({
     .select("id, title_tr")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
+
+  const { data: assets, error: asErr } = await supabase
+    .from("assets")
+    .select("id,bucket,path,created_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
 
   const trData = tr ?? {
     title: "",
@@ -73,6 +80,46 @@ export default async function EditArticlePage({
         </p>
       )}
 
+      {asErr && (
+        <p style={{ color: "crimson" }}>
+          Assets okunamadı: {asErr.message}
+        </p>
+      )}
+
+      {/* ✅ Kapak upload + otomatik bağlama (AYRI FORM) */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Kapak Görseli</div>
+
+        <form
+          action={uploadCoverForArticle}
+          style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+        >
+          <input type="hidden" name="article_id" value={article.id} />
+          <input type="file" name="file" accept="image/*" required />
+          <button type="submit" style={btnSecondary}>
+            Kapak Upload + Otomatik Bağla
+          </button>
+
+          <Link href="/dashboard/assets" style={btnSecondaryLink}>
+            Assets’e Git
+          </Link>
+        </form>
+
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu makaleye “cover” olarak bağlar.
+        </div>
+      </div>
+
+      {/* ✅ Ana kayıt formu */}
       <form
         action={updateArticleTR}
         style={{ marginTop: 16, display: "grid", gap: 12 }}
@@ -104,6 +151,23 @@ export default async function EditArticlePage({
           </select>
         </label>
 
+        {/* ✅ Cover seçimi (mevcut assetlerden) */}
+        <label style={label}>
+          Cover (assets)
+          <select
+            name="cover_asset_id"
+            defaultValue={article.cover_asset_id ?? ""}
+            style={input}
+          >
+            <option value="">- Kapak seçmeyin -</option>
+            {(assets ?? []).map((a: AssetMiniRow) => (
+              <option key={a.id} value={a.id}>
+                {a.path}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label style={label}>
           Başlık (TR)
           <input name="title" defaultValue={trData.title} style={input} />
@@ -129,9 +193,7 @@ export default async function EditArticlePage({
           />
         </label>
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={label}>
             Slug (TR)
             <input name="slug" defaultValue={trData.slug} style={input} />
@@ -139,11 +201,7 @@ export default async function EditArticlePage({
 
           <label style={label}>
             SEO Title
-            <input
-              name="seo_title"
-              defaultValue={trData.seo_title}
-              style={input}
-            />
+            <input name="seo_title" defaultValue={trData.seo_title} style={input} />
           </label>
         </div>
 
@@ -157,7 +215,6 @@ export default async function EditArticlePage({
           />
         </label>
 
-        {/* ✅ Alt aksiyonlar: Preview + Save */}
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <Link
             href={`/dashboard/articles/${article.id}/preview`}
@@ -210,4 +267,14 @@ const btnSecondaryLink: CSSProperties = {
   textDecoration: "none",
   fontWeight: 800,
   display: "inline-block",
+};
+
+const btnSecondary: CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "#fff",
+  color: "#111",
+  cursor: "pointer",
+  fontWeight: 800,
 };
