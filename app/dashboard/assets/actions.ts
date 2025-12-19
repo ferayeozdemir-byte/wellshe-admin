@@ -3,7 +3,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 
-type AssetRow = {
+export type AssetRow = {
   id: string;
   bucket: string;
   path: string;
@@ -34,18 +34,36 @@ function extFromFilename(name: string) {
   const idx = name.lastIndexOf(".");
   if (idx === -1) return "";
   const ext = name.slice(idx).toLowerCase();
-  // basit güvenlik: çok uzun uzantıları engelle
   if (ext.length > 10) return "";
   return ext;
 }
 
-export async function uploadAsset(formData: FormData) {
+export async function listAssets() {
+  const supabase = getAdminSupabase();
+
+  const { data, error } = await supabase
+    .from("assets")
+    .select("id,bucket,path,content_type,bytes,created_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as AssetRow[];
+  return rows.map((r) => ({
+    ...r,
+    publicUrl: getPublicUrl(r.bucket, r.path),
+  }));
+}
+
+// ✅ IMPORTANT: Form action için dönüş tipi void olmalı
+export async function uploadAsset(formData: FormData): Promise<void> {
   const supabase = getAdminSupabase();
 
   const file = formData.get("file") as File | null;
   if (!file) throw new Error("Dosya seçilmedi.");
 
-  // ✅ Bucket: media
+  // Bucket: media
   const bucket = "media";
 
   // klasör yapısı: articles/2025-12/uuid.jpg
@@ -61,64 +79,28 @@ export async function uploadAsset(formData: FormData) {
 
   const path = `articles/${yyyy}-${mm}/${id}${ext}`;
 
-  const bytes = file.size ?? null;
-  const contentType = file.type || null;
-
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
 
   // 1) Storage upload
-  const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {
-    contentType: contentType ?? undefined,
+  const { error: upErr } = await supabase.storage.from(bucket).upload(path, bytes, {
+    contentType: file.type || "application/octet-stream",
     upsert: false,
   });
-
-  if (upErr) {
-    throw new Error(`Storage upload hatası: ${upErr.message}`);
-  }
+  if (upErr) throw new Error(upErr.message);
 
   // 2) DB insert (assets tablosu)
-  const { data: row, error: dbErr } = await supabase
-    .from("assets")
-    .insert({
-      bucket,
-      path,
-      content_type: contentType,
-      bytes,
-      // width/height/alt_* gibi alanlar varsa şimdilik NULL kalsın
-    })
-    .select("id,bucket,path,content_type,bytes,created_at")
-    .single<AssetRow>();
+  const { error: insErr } = await supabase.from("assets").insert({
+    bucket,
+    path,
+    content_type: file.type || null,
+    bytes: bytes.byteLength,
+  });
+  if (insErr) throw new Error(insErr.message);
 
-  if (dbErr) {
-    // DB insert patlarsa, Storage’da kalan dosyayı temizleyelim
-    await supabase.storage.from(bucket).remove([path]).catch(() => null);
-    throw new Error(`DB insert hatası: ${dbErr.message}`);
-  }
-
+  // 3) UI refresh
   revalidatePath("/dashboard/assets");
 
-  return {
-    ok: true,
-    asset: row,
-    publicUrl: getPublicUrl(bucket, path),
-  };
-}
-
-export async function listAssets() {
-  const supabase = getAdminSupabase();
-
-  const { data, error } = await supabase
-    .from("assets")
-    .select("id,bucket,path,content_type,bytes,created_at")
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (error) throw new Error(`Assets list error: ${error.message}`);
-
-  const items = (data ?? []).map((a: any) => ({
-    ...a,
-    publicUrl: getPublicUrl(a.bucket, a.path),
-  }));
-
-  return items as Array<AssetRow & { publicUrl: string | null }>;
+  // ✅ return nothing
+  return;
 }

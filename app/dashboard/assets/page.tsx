@@ -9,7 +9,10 @@ export default async function AssetsPage() {
   return (
     <div style={{ padding: 24, maxWidth: 980 }}>
       <h1>Assets</h1>
-      <p>Buradan görsel yükleyin. Yüklenen görseller Storage’daki <b>media</b> bucket’ına gider ve <b>assets</b> tablosuna kaydedilir.</p>
+      <p>
+        Buradan görsel yükleyin. Yüklenen görseller Storage’daki <b>media</b> bucket’ına gider ve{" "}
+        <b>assets</b> tablosuna kaydedilir.
+      </p>
 
       <form action={uploadAsset} style={{ marginTop: 16, marginBottom: 24 }}>
         <input type="file" name="file" accept="image/*" required />
@@ -33,7 +36,7 @@ export default async function AssetsPage() {
         <p>Henüz asset yok.</p>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
-          {assets.map((a) => (
+          {assets.map((a: any) => (
             <div
               key={a.id}
               style={{
@@ -72,18 +75,26 @@ export default async function AssetsPage() {
 
               <div>
                 <div style={{ fontSize: 12, color: "#666" }}>
-                  <div><b>Bucket:</b> {a.bucket}</div>
-                  <div><b>Path:</b> {a.path}</div>
-                  <div><b>Type:</b> {a.content_type ?? "-"}</div>
-                  <div><b>Bytes:</b> {a.bytes ?? "-"}</div>
-                  <div><b>Created:</b> {a.created_at ?? "-"}</div>
+                  <div>
+                    <b>Bucket:</b> {a.bucket}
+                  </div>
+                  <div>
+                    <b>Path:</b> {a.path}
+                  </div>
+                  <div>
+                    <b>Type:</b> {a.content_type ?? "-"}
+                  </div>
+                  <div>
+                    <b>Bytes:</b> {a.bytes ?? "-"}
+                  </div>
+                  <div>
+                    <b>Created:</b> {a.created_at ?? "-"}
+                  </div>
                 </div>
 
                 {a.publicUrl ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
-                      Public URL:
-                    </div>
+                    <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Public URL:</div>
                     <input
                       readOnly
                       value={a.publicUrl}
