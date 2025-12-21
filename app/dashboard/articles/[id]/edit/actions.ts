@@ -86,11 +86,12 @@ function extFromFilename(name: string) {
 
 export async function updateArticleTRNoRedirect(formData: FormData) {
   await requireAdmin();
+
   const audio_asset_id_raw = formData.get("audio_asset_id");
-const audio_asset_id =
-  audio_asset_id_raw && String(audio_asset_id_raw).trim() !== ""
-    ? String(audio_asset_id_raw).trim()
-    : null;
+  const audio_asset_id =
+    audio_asset_id_raw && String(audio_asset_id_raw).trim() !== ""
+      ? String(audio_asset_id_raw).trim()
+      : null;
 
   const supabase = await createClient();
 
@@ -153,18 +154,18 @@ const audio_asset_id =
   // 2) TR translation upsert
   const { error: tErr } = await supabase.from("article_translations").upsert(
     {
-    article_id: id,
-    lang: "tr",
-    title,
-    summary,
-    content_html,
-    slug,
-    seo_title,
-    seo_description,
-    audio_asset_id, // ✅ yeni alan
-  },
-  { onConflict: "article_id,lang" }
-);
+      article_id: id,
+      lang: "tr",
+      title,
+      summary,
+      content_html,
+      slug,
+      seo_title,
+      seo_description,
+      audio_asset_id, // ✅ yeni alan
+    },
+    { onConflict: "article_id,lang" }
+  );
 
   if (tErr) throw new Error(tErr.message);
 
@@ -196,7 +197,8 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
 
   const file = formData.get("file") as File | null;
   if (!file) throw new Error("Dosya seçilmedi.");
-    const maxBytes = 2 * 1024 * 1024; // 2MB
+
+  const maxBytes = 2 * 1024 * 1024; // 2MB
   if (file.size > maxBytes) {
     throw new Error("Kapak görseli 2 MB’tan büyük. Lütfen görseli sıkıştırın.");
   }
@@ -241,6 +243,81 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
     .eq("id", article_id);
 
   if (artErr) throw new Error(artErr.message);
+
+  revalidatePath(`/dashboard/articles/${article_id}/edit`);
+  revalidatePath(`/dashboard/articles/${article_id}/preview`);
+  revalidatePath("/dashboard/articles");
+
+  redirect(`/dashboard/articles/${article_id}/edit`);
+}
+
+/* ✅ NEW: Audio upload + otomatik TR bağlama */
+export async function uploadAudioForArticle(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const admin = getAdminSupabase();
+
+  const article_id = String(formData.get("article_id") || "").trim();
+  if (!article_id) throw new Error("article_id eksik");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("Dosya seçilmedi.");
+
+  // Audio dosyaları genelde 2MB’ı aşar; burada daha makul limit koyuyoruz.
+  const maxBytes = 20 * 1024 * 1024; // 20MB
+  if (file.size > maxBytes) {
+    throw new Error("Ses dosyası 20 MB’tan büyük. Lütfen dosyayı küçültün.");
+  }
+
+  const ct = file.type || "application/octet-stream";
+  if (!ct.startsWith("audio/")) {
+    throw new Error(`Bu dosya audio değil (type: ${ct}).`);
+  }
+
+  const bucket = "media";
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+
+  const ext = extFromFilename(file.name) || "";
+  const fileId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
+
+  const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
+    contentType: ct,
+    upsert: false,
+  });
+  if (upErr) throw new Error(upErr.message);
+
+  const { data: inserted, error: insErr } = await admin
+    .from("assets")
+    .insert({
+      bucket,
+      path,
+      content_type: ct,
+      bytes: file.size,
+    })
+    .select("id")
+    .single();
+
+  if (insErr) throw new Error(insErr.message);
+  if (!inserted?.id) throw new Error("Asset ID alınamadı.");
+
+  // ✅ TR çeviriye audio_asset_id yaz (yoksa oluşturur)
+  const { error: trErr } = await admin.from("article_translations").upsert(
+    {
+      article_id,
+      lang: "tr",
+      audio_asset_id: inserted.id,
+    },
+    { onConflict: "article_id,lang" }
+  );
+
+  if (trErr) throw new Error(trErr.message);
 
   revalidatePath(`/dashboard/articles/${article_id}/edit`);
   revalidatePath(`/dashboard/articles/${article_id}/preview`);

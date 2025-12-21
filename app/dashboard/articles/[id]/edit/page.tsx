@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { updateArticleTR, uploadCoverForArticle } from "./actions";
+import { updateArticleTR, uploadCoverForArticle, uploadAudioForArticle } from "./actions";
 import ContentEditor from "./ContentEditor";
 import type { CSSProperties } from "react";
 
@@ -147,6 +147,45 @@ export default async function EditArticlePage({
         </div>
       </div>
 
+      {/* ✅ NEW: Audio upload + otomatik bağlama (AYRI FORM) */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Ses Dosyası (Audio)</div>
+
+        <form
+          action={uploadAudioForArticle}
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <input type="hidden" name="article_id" value={article.id} />
+          <input type="file" name="file" accept="audio/*" required />
+          <button type="submit" style={btnSecondary}>
+            Ses Upload + Otomatik Bağla
+          </button>
+
+          <Link href="/dashboard/assets" style={btnSecondaryLink}>
+            Assets’e Git
+          </Link>
+        </form>
+
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          Not: Upload sonrası sistem yeni asset oluşturur ve TR çevirisindeki
+          <b> audio_asset_id</b> alanına otomatik bağlar.
+        </div>
+      </div>
+
       {/* ✅ Ana kayıt formu */}
       <form
         action={updateArticleTR}
@@ -202,8 +241,7 @@ export default async function EditArticlePage({
           </select>
 
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Her içerik için tek ses dosyası. 2 MB üzeri uyarısını bir
-            sonraki adımda Save sırasında ekleyeceğiz.
+            Not: Her içerik için tek ses dosyası.
           </div>
         </label>
 
