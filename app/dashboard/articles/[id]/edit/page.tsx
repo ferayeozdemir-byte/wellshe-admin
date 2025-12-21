@@ -149,42 +149,41 @@ export default async function EditArticlePage({
 
       {/* ✅ NEW: Audio upload + otomatik bağlama (AYRI FORM) */}
       <div
-        style={{
-          marginTop: 16,
-          padding: 12,
-          border: "1px solid #eee",
-          borderRadius: 12,
-          display: "grid",
-          gap: 10,
-        }}
-      >
-        <div style={{ fontWeight: 800 }}>Ses Dosyası (Audio)</div>
+  style={{
+    marginTop: 16,
+    padding: 12,
+    border: "1px solid #eee",
+    borderRadius: 12,
+    display: "grid",
+    gap: 10,
+  }}
+>
+  <div style={{ fontWeight: 800 }}>Ses Dosyası (Upload)</div>
 
-        <form
-          action={uploadAudioForArticle}
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <input type="hidden" name="article_id" value={article.id} />
-          <input type="file" name="file" accept="audio/*" required />
-          <button type="submit" style={btnSecondary}>
-            Ses Upload + Otomatik Bağla
-          </button>
+  <form
+    action={uploadAudioForArticle}
+    style={{
+      display: "flex",
+      gap: 10,
+      alignItems: "center",
+      flexWrap: "wrap",
+    }}
+  >
+    <input type="hidden" name="article_id" value={article.id} />
+    <input type="file" name="file" accept="audio/*,.mp3,.mpeg" required />
+    <button type="submit" style={btnSecondary}>
+      Ses Upload + Otomatik Bağla
+    </button>
 
-          <Link href="/dashboard/assets" style={btnSecondaryLink}>
-            Assets’e Git
-          </Link>
-        </form>
+    <Link href="/dashboard/assets" style={btnSecondaryLink}>
+      Assets’e Git
+    </Link>
+  </form>
 
-        <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve TR çevirisindeki
-          <b> audio_asset_id</b> alanına otomatik bağlar.
-        </div>
-      </div>
+  <div style={{ fontSize: 12, opacity: 0.7 }}>
+    Not: Önce makaleyi “Save” edip TR kaydı oluşsun. Sonra ses yükleyin.
+  </div>
+</div>
 
       {/* ✅ Ana kayıt formu */}
       <form

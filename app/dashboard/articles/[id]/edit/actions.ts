@@ -262,18 +262,32 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   const file = formData.get("file") as File | null;
   if (!file) throw new Error("Dosya seçilmedi.");
 
-  // Audio dosyaları genelde 2MB’ı aşar; makul limit:
+  // Audio dosyaları 2MB üstü olabilir → makul limit
   const maxBytes = 20 * 1024 * 1024; // 20MB
   if (file.size > maxBytes) {
     throw new Error("Ses dosyası 20 MB’tan büyük. Lütfen dosyayı küçültün.");
   }
 
+  // ✅ Önce TR translation var mı kontrol et
+  // Yoksa audio update edemeyiz (upsert title null hatası veriyor)
+  const { data: trRow, error: trReadErr } = await admin
+    .from("article_translations")
+    .select("article_id")
+    .eq("article_id", article_id)
+    .eq("lang", "tr")
+    .maybeSingle();
+
+  if (trReadErr) throw new Error(trReadErr.message);
+  if (!trRow) {
+    throw new Error(
+      "Bu makalenin TR çevirisi yok. Önce makaleyi Edit sayfasında 'Save' ile kaydedin, sonra ses yükleyin."
+    );
+  }
+
   const ext = extFromFilename(file.name) || "";
   const rawType = (file.type || "").toLowerCase();
 
-  // ✅ Daha toleranslı içerik tipi belirleme:
-  // - Normalde audio/* ise ok
-  // - .mp3 / .mpeg gibi uzantılarda bazen video/mpeg veya boş gelir -> audio/mpeg’e çevir
+  // ✅ .mpeg bazen video/mpeg veya octet-stream gelebiliyor → audio/mpeg’e zorla
   let finalContentType = rawType;
 
   const isAudioByType = rawType.startsWith("audio/");
@@ -291,7 +305,6 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
     }
   }
 
-  // Hâlâ audio değilse reddet (ama artık mpeg/mp3 kurtuluyor)
   if (!finalContentType.startsWith("audio/")) {
     throw new Error(
       `Bu dosya audio olarak algılanamadı. (type: ${rawType || "boş"}, ext: ${ext || "yok"})`
@@ -311,18 +324,20 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
 
   const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
 
+  // 1) storage upload
   const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
     contentType: finalContentType,
     upsert: false,
   });
   if (upErr) throw new Error(upErr.message);
 
+  // 2) assets insert
   const { data: inserted, error: insErr } = await admin
     .from("assets")
     .insert({
       bucket,
       path,
-      content_type: finalContentType, // ✅ burada düzelttik
+      content_type: finalContentType,
       bytes: file.size,
     })
     .select("id")
@@ -331,16 +346,14 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   if (insErr) throw new Error(insErr.message);
   if (!inserted?.id) throw new Error("Asset ID alınamadı.");
 
-  const { error: trErr } = await admin.from("article_translations").upsert(
-    {
-      article_id,
-      lang: "tr",
-      audio_asset_id: inserted.id,
-    },
-    { onConflict: "article_id,lang" }
-  );
+  // ✅ 3) SADECE update: upsert yok!
+  const { error: updErr } = await admin
+    .from("article_translations")
+    .update({ audio_asset_id: inserted.id })
+    .eq("article_id", article_id)
+    .eq("lang", "tr");
 
-  if (trErr) throw new Error(trErr.message);
+  if (updErr) throw new Error(updErr.message);
 
   revalidatePath(`/dashboard/articles/${article_id}/edit`);
   revalidatePath(`/dashboard/articles/${article_id}/preview`);
