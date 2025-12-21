@@ -7,7 +7,16 @@ import ContentEditor from "./ContentEditor";
 import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };
-type AssetMiniRow = { id: string; bucket: string; path: string; created_at: string | null };
+type AssetMiniRow = {
+  id: string;
+  bucket: string;
+  path: string;
+  created_at: string | null;
+  bytes: number | null;
+  content_type: string | null;
+  width: number | null;
+  height: number | null;
+};
 
 export default async function EditArticlePage({
   params,
@@ -28,11 +37,11 @@ export default async function EditArticlePage({
   if (aErr || !article) notFound();
 
   const { data: tr, error: tErr } = await supabase
-    .from("article_translations")
-    .select("title, summary, content_html, slug, seo_title, seo_description")
-    .eq("article_id", id)
-    .eq("lang", "tr")
-    .single();
+  .from("article_translations")
+  .select("title,summary,content_html,slug,seo_title,seo_description,audio_asset_id")
+  .eq("article_id", id)
+  .eq("lang", "tr")
+  .single();
 
   const { data: categories, error: cErr } = await supabase
     .from("categories")
@@ -41,18 +50,19 @@ export default async function EditArticlePage({
     .order("sort_order", { ascending: true });
 
   const { data: assets, error: asErr } = await supabase
-    .from("assets")
-.select("id,bucket,path,created_at,bytes")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  .from("assets")
+  .select("id,bucket,path,created_at,bytes,content_type,width,height")
+  .order("created_at", { ascending: false })
+  .limit(200);
 
   const trData = tr ?? {
-    title: "",
-    summary: "",
-    content_html: "",
-    slug: "",
-    seo_title: "",
-    seo_description: "",
+  title: "",
+  summary: "",
+  content_html: "",
+  slug: "",
+  seo_title: "",
+  seo_description: "",
+  audio_asset_id: null,
   };
 
   return (
@@ -152,7 +162,36 @@ export default async function EditArticlePage({
           </select>
         </label>
 
-        {/* ✅ Cover seçimi (mevcut assetlerden) */}
+        {/* ✅ Audio seçimi (assets) */}
+<label>Ses Dosyası...</label>
+
+{/* ✅ Cover seçimi (assets) */}
+<label>Cover...</label>
+  Ses Dosyası (Audio)
+  <select
+    name="audio_asset_id"
+    defaultValue={trData.audio_asset_id ?? ""}
+    style={input}
+  >
+    <option value="">- Ses ekleme -</option>
+
+    {(assets ?? [])
+      .filter((a: any) => (a.content_type ?? "").startsWith("audio/"))
+      .map((a: any) => (
+        <option key={a.id} value={a.id}>
+          {a.path}
+          {typeof a.bytes === "number"
+            ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
+            : ""}
+        </option>
+      ))}
+  </select>
+
+  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+    Not: Tek ses dosyası desteklenir. 2 MB üzeri ise kaydetmeden önce uyarı göstereceğiz.
+  </div>
+</label>
+
         <label style={label}>
           Cover (assets)
           <select
@@ -187,16 +226,19 @@ export default async function EditArticlePage({
         <label style={label}>
   İçerik (TR) — Editör
   <ContentEditor
-    name="content_html"
-    initialHTML={trData.content_html}
-    assets={(assets ?? []).map((a: any) => ({
-      id: a.id,
-      bucket: a.bucket,
-      path: a.path,
-      created_at: a.created_at ?? null,
-      bytes: (a as any).bytes ?? null, // bytes kolonu sende var
-    }))}
-  />
+  name="content_html"
+  initialHTML={trData.content_html}
+  assets={(assets ?? []).map((a) => ({
+    id: a.id,
+    bucket: a.bucket,
+    path: a.path,
+    created_at: a.created_at,
+    bytes: a.bytes,
+    content_type: a.content_type,
+    width: a.width,
+    height: a.height,
+  }))}
+/>
 </label>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

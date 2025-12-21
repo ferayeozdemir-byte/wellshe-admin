@@ -86,6 +86,12 @@ function extFromFilename(name: string) {
 
 export async function updateArticleTRNoRedirect(formData: FormData) {
   await requireAdmin();
+  const audio_asset_id_raw = formData.get("audio_asset_id");
+const audio_asset_id =
+  audio_asset_id_raw && String(audio_asset_id_raw).trim() !== ""
+    ? String(audio_asset_id_raw).trim()
+    : null;
+
   const supabase = await createClient();
 
   const id = String(formData.get("id") || "").trim();
@@ -147,17 +153,18 @@ export async function updateArticleTRNoRedirect(formData: FormData) {
   // 2) TR translation upsert
   const { error: tErr } = await supabase.from("article_translations").upsert(
     {
-      article_id: id,
-      lang: "tr",
-      title,
-      summary,
-      content_html,
-      slug,
-      seo_title,
-      seo_description,
-    },
-    { onConflict: "article_id,lang" }
-  );
+    article_id: id,
+    lang: "tr",
+    title,
+    summary,
+    content_html,
+    slug,
+    seo_title,
+    seo_description,
+    audio_asset_id, // ✅ yeni alan
+  },
+  { onConflict: "article_id,lang" }
+);
 
   if (tErr) throw new Error(tErr.message);
 
