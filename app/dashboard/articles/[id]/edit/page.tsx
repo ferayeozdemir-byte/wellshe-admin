@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { updateArticleTR, uploadCoverForArticle, saveAndPreviewTR } from "./actions";
+import ContentEditor from "./ContentEditor";
 import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };
@@ -41,7 +42,7 @@ export default async function EditArticlePage({
 
   const { data: assets, error: asErr } = await supabase
     .from("assets")
-    .select("id,bucket,path,created_at")
+.select("id,bucket,path,created_at,bytes")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -184,14 +185,19 @@ export default async function EditArticlePage({
         </label>
 
         <label style={label}>
-          İçerik (TR) — HTML
-          <textarea
-            name="content_html"
-            defaultValue={trData.content_html}
-            rows={12}
-            style={textarea}
-          />
-        </label>
+  İçerik (TR) — Editör
+  <ContentEditor
+    name="content_html"
+    initialHTML={trData.content_html}
+    assets={(assets ?? []).map((a: any) => ({
+      id: a.id,
+      bucket: a.bucket,
+      path: a.path,
+      created_at: a.created_at ?? null,
+      bytes: (a as any).bytes ?? null, // bytes kolonu sende var
+    }))}
+  />
+</label>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={label}>

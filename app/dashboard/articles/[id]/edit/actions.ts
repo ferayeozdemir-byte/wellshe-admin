@@ -189,6 +189,10 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
 
   const file = formData.get("file") as File | null;
   if (!file) throw new Error("Dosya seçilmedi.");
+    const maxBytes = 2 * 1024 * 1024; // 2MB
+  if (file.size > maxBytes) {
+    throw new Error("Kapak görseli 2 MB’tan büyük. Lütfen görseli sıkıştırın.");
+  }
 
   const bucket = "media";
 
