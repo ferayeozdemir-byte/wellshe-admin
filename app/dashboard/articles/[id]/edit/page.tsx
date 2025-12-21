@@ -2,11 +2,12 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { updateArticleTR, uploadCoverForArticle, saveAndPreviewTR } from "./actions";
+import { updateArticleTR, uploadCoverForArticle } from "./actions";
 import ContentEditor from "./ContentEditor";
 import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };
+
 type AssetMiniRow = {
   id: string;
   bucket: string;
@@ -37,11 +38,13 @@ export default async function EditArticlePage({
   if (aErr || !article) notFound();
 
   const { data: tr, error: tErr } = await supabase
-  .from("article_translations")
-  .select("title,summary,content_html,slug,seo_title,seo_description,audio_asset_id")
-  .eq("article_id", id)
-  .eq("lang", "tr")
-  .single();
+    .from("article_translations")
+    .select(
+      "title,summary,content_html,slug,seo_title,seo_description,audio_asset_id"
+    )
+    .eq("article_id", id)
+    .eq("lang", "tr")
+    .single();
 
   const { data: categories, error: cErr } = await supabase
     .from("categories")
@@ -50,19 +53,19 @@ export default async function EditArticlePage({
     .order("sort_order", { ascending: true });
 
   const { data: assets, error: asErr } = await supabase
-  .from("assets")
-  .select("id,bucket,path,created_at,bytes,content_type,width,height")
-  .order("created_at", { ascending: false })
-  .limit(200);
+    .from("assets")
+    .select("id,bucket,path,created_at,bytes,content_type,width,height")
+    .order("created_at", { ascending: false })
+    .limit(200);
 
   const trData = tr ?? {
-  title: "",
-  summary: "",
-  content_html: "",
-  slug: "",
-  seo_title: "",
-  seo_description: "",
-  audio_asset_id: null,
+    title: "",
+    summary: "",
+    content_html: "",
+    slug: "",
+    seo_title: "",
+    seo_description: "",
+    audio_asset_id: null as string | null,
   };
 
   return (
@@ -86,15 +89,11 @@ export default async function EditArticlePage({
       )}
 
       {cErr && (
-        <p style={{ color: "crimson" }}>
-          Kategoriler okunamadı: {cErr.message}
-        </p>
+        <p style={{ color: "crimson" }}>Kategoriler okunamadı: {cErr.message}</p>
       )}
 
       {asErr && (
-        <p style={{ color: "crimson" }}>
-          Assets okunamadı: {asErr.message}
-        </p>
+        <p style={{ color: "crimson" }}>Assets okunamadı: {asErr.message}</p>
       )}
 
       {/* ✅ Kapak upload + otomatik bağlama (AYRI FORM) */}
@@ -112,7 +111,12 @@ export default async function EditArticlePage({
 
         <form
           action={uploadCoverForArticle}
-          style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
         >
           <input type="hidden" name="article_id" value={article.id} />
           <input type="file" name="file" accept="image/*" required />
@@ -126,7 +130,8 @@ export default async function EditArticlePage({
         </form>
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu makaleye “cover” olarak bağlar.
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
+          makaleye “cover” olarak bağlar.
         </div>
       </div>
 
@@ -138,7 +143,7 @@ export default async function EditArticlePage({
         <input type="hidden" name="id" value={article.id} />
 
         <label style={label}>
-          Status
+          <div>Status</div>
           <select name="status" defaultValue={article.status} style={input}>
             <option value="draft">draft</option>
             <option value="published">published</option>
@@ -147,7 +152,7 @@ export default async function EditArticlePage({
         </label>
 
         <label style={label}>
-          Kategori
+          <div>Kategori</div>
           <select
             name="category_id"
             defaultValue={article.category_id ?? ""}
@@ -163,37 +168,38 @@ export default async function EditArticlePage({
         </label>
 
         {/* ✅ Audio seçimi (assets) */}
-<label>Ses Dosyası...</label>
-
-{/* ✅ Cover seçimi (assets) */}
-<label>Cover...</label>
-  Ses Dosyası (Audio)
-  <select
-    name="audio_asset_id"
-    defaultValue={trData.audio_asset_id ?? ""}
-    style={input}
-  >
-    <option value="">- Ses ekleme -</option>
-
-    {(assets ?? [])
-      .filter((a: any) => (a.content_type ?? "").startsWith("audio/"))
-      .map((a: any) => (
-        <option key={a.id} value={a.id}>
-          {a.path}
-          {typeof a.bytes === "number"
-            ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
-            : ""}
-        </option>
-      ))}
-  </select>
-
-  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-    Not: Tek ses dosyası desteklenir. 2 MB üzeri ise kaydetmeden önce uyarı göstereceğiz.
-  </div>
-</label>
-
         <label style={label}>
-          Cover (assets)
+          <div>Ses Dosyası (Audio)</div>
+          <select
+            name="audio_asset_id"
+            defaultValue={trData.audio_asset_id ?? ""}
+            style={input}
+          >
+            <option value="">- Ses ekleme -</option>
+
+            {(assets ?? [])
+              .filter((a: AssetMiniRow) =>
+                String(a.content_type ?? "").startsWith("audio/")
+              )
+              .map((a: AssetMiniRow) => (
+                <option key={a.id} value={a.id}>
+                  {a.path}
+                  {typeof a.bytes === "number"
+                    ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
+                    : ""}
+                </option>
+              ))}
+          </select>
+
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            Not: Her içerik için tek ses dosyası. 2 MB üzeri uyarısını bir
+            sonraki adımda Save sırasında ekleyeceğiz.
+          </div>
+        </label>
+
+        {/* ✅ Cover seçimi (mevcut assetlerden) */}
+        <label style={label}>
+          <div>Cover (assets)</div>
           <select
             name="cover_asset_id"
             defaultValue={article.cover_asset_id ?? ""}
@@ -209,12 +215,12 @@ export default async function EditArticlePage({
         </label>
 
         <label style={label}>
-          Başlık (TR)
+          <div>Başlık (TR)</div>
           <input name="title" defaultValue={trData.title} style={input} />
         </label>
 
         <label style={label}>
-          Özet (TR)
+          <div>Özet (TR)</div>
           <textarea
             name="summary"
             defaultValue={trData.summary}
@@ -224,37 +230,41 @@ export default async function EditArticlePage({
         </label>
 
         <label style={label}>
-  İçerik (TR) — Editör
-  <ContentEditor
-  name="content_html"
-  initialHTML={trData.content_html}
-  assets={(assets ?? []).map((a) => ({
-    id: a.id,
-    bucket: a.bucket,
-    path: a.path,
-    created_at: a.created_at,
-    bytes: a.bytes,
-    content_type: a.content_type,
-    width: a.width,
-    height: a.height,
-  }))}
-/>
-</label>
+          <div>İçerik (TR) — Editör</div>
+          <ContentEditor
+            name="content_html"
+            initialHTML={trData.content_html}
+            assets={(assets ?? []).map((a: AssetMiniRow) => ({
+              id: a.id,
+              bucket: a.bucket,
+              path: a.path,
+              created_at: a.created_at ?? null,
+              bytes: a.bytes ?? null,
+              content_type: a.content_type ?? null,
+              width: a.width ?? null,
+              height: a.height ?? null,
+            }))}
+          />
+        </label>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={label}>
-            Slug (TR)
+            <div>Slug (TR)</div>
             <input name="slug" defaultValue={trData.slug} style={input} />
           </label>
 
           <label style={label}>
-            SEO Title
-            <input name="seo_title" defaultValue={trData.seo_title} style={input} />
+            <div>SEO Title</div>
+            <input
+              name="seo_title"
+              defaultValue={trData.seo_title}
+              style={input}
+            />
           </label>
         </div>
 
         <label style={label}>
-          SEO Description
+          <div>SEO Description</div>
           <textarea
             name="seo_description"
             defaultValue={trData.seo_description}
@@ -264,13 +274,6 @@ export default async function EditArticlePage({
         </label>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <Link
-            href={`/dashboard/articles/${article.id}/preview`}
-            style={btnSecondaryLink}
-          >
-            Preview (Mobile)
-          </Link>
-
           <button type="submit" style={btnPrimary}>
             Save
           </button>
