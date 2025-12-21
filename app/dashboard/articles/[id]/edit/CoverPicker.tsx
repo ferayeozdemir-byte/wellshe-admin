@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Asset = {
   id: string;
@@ -28,6 +28,11 @@ export default function CoverPicker({
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string>(defaultValue ?? "");
 
+  // ✅ defaultValue sonradan değişirse state'i güncelle (pickCover ile dönüşlerde şart)
+  useEffect(() => {
+    setSelectedId(defaultValue ?? "");
+  }, [defaultValue]);
+
   const selected = useMemo(
     () => assets.find((a) => a.id === selectedId) ?? null,
     [assets, selectedId]
@@ -44,6 +49,20 @@ export default function CoverPicker({
     setOpen(false);
   }
 
+  function clear() {
+    setSelectedId("");
+    setOpen(false);
+  }
+
+  const btn: React.CSSProperties = {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #ddd",
+    background: "#fff",
+    cursor: "pointer",
+    fontWeight: 800,
+  };
+
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {/* hidden input: form submit buradan gidecek */}
@@ -54,14 +73,7 @@ export default function CoverPicker({
         <button
           type="button"
           onClick={() => setOpen((s) => !s)}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-            fontWeight: 800,
-          }}
+          style={btn}
         >
           {selected ? "Kapak değiştir" : "Kapak seç"}
         </button>
@@ -86,6 +98,7 @@ export default function CoverPicker({
               border: "1px solid #eee",
             }}
           />
+
           <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>
             <div style={{ fontWeight: 800, marginBottom: 2 }}>Seçili kapak</div>
             {selected.path}
@@ -93,16 +106,8 @@ export default function CoverPicker({
 
           <button
             type="button"
-            onClick={() => setSelectedId("")}
-            style={{
-              marginLeft: "auto",
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-              fontWeight: 800,
-            }}
+            onClick={clear}
+            style={{ ...btn, marginLeft: "auto", padding: "8px 10px" }}
           >
             Kaldır
           </button>
@@ -132,18 +137,8 @@ export default function CoverPicker({
                 fontWeight: 600,
               }}
             />
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                background: "#fff",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
+
+            <button type="button" onClick={() => setOpen(false)} style={btn}>
               Kapat
             </button>
           </div>
@@ -159,7 +154,7 @@ export default function CoverPicker({
               paddingRight: 4,
             }}
           >
-            {/* Kapak seçmeyin kutusu */}
+            {/* Kapak yok kutusu */}
             <button
               type="button"
               onClick={() => pick("")}
@@ -170,7 +165,7 @@ export default function CoverPicker({
                 padding: 8,
                 cursor: "pointer",
               }}
-              title="Kapak seçmeyin"
+              title="Kapak yok"
             >
               <div
                 style={{
@@ -222,7 +217,7 @@ export default function CoverPicker({
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-            Not: Seçince otomatik kapanır. Çok büyük görünmez; sadece thumbnail.
+            Not: Seçince otomatik kapanır. Thumbnail görünür.
           </div>
         </div>
       ) : null}
