@@ -100,4 +100,33 @@ export async function uploadAsset(formData: FormData): Promise<void> {
 
   // ✅ return nothing
   return;
+
+  import { redirect } from "next/navigation";
+
+// ✅ Asset silme (Storage + DB)
+export async function deleteAsset(formData: FormData): Promise<void> {
+  const supabase = getAdminSupabase();
+
+  const id = String(formData.get("id") || "").trim();
+  const bucket = String(formData.get("bucket") || "").trim();
+  const path = String(formData.get("path") || "").trim();
+
+  if (!id || !bucket || !path) {
+    redirect(`/dashboard/assets?err=${encodeURIComponent("id/bucket/path eksik")}`);
+  }
+
+  // 1) Storage’dan sil
+  const { error: stErr } = await supabase.storage.from(bucket).remove([path]);
+  if (stErr) {
+    redirect(`/dashboard/assets?err=${encodeURIComponent(stErr.message)}`);
+  }
+
+  // 2) DB’den sil
+  const { error: dbErr } = await supabase.from("assets").delete().eq("id", id);
+  if (dbErr) {
+    redirect(`/dashboard/assets?err=${encodeURIComponent(dbErr.message)}`);
+  }
+
+  revalidatePath("/dashboard/assets");
+  redirect("/dashboard/assets?ok=1");
 }
