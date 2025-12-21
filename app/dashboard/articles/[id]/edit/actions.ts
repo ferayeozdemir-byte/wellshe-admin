@@ -54,11 +54,17 @@ async function ensureUniqueSlugTR(
 }
 
 function getAdminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // ✅ Vercel env isimleri sende böyleydi:
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
+  const serviceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  "";
 
-  if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL eksik (Vercel env).");
-  if (!serviceKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY eksik (Vercel env).");
+  if (!url) throw new Error("SUPABASE URL env eksik (Vercel).");
+  if (!serviceKey) throw new Error("SERVICE ROLE KEY env eksik (Vercel).");
 
   return createAdminClient(url, serviceKey, {
     auth: { persistSession: false },
@@ -73,7 +79,7 @@ function extFromFilename(name: string) {
   return ext;
 }
 
-export async function updateArticleTR(formData: FormData) {
+export async function updateArticleTRNoRedirect(formData: FormData) {
   await requireAdmin();
   const supabase = await createClient();
 
@@ -88,7 +94,6 @@ export async function updateArticleTR(formData: FormData) {
       ? String(category_id_raw).trim()
       : null;
 
-  // ✅ cover_asset_id (dropdown’tan gelir)
   const cover_asset_id_raw = formData.get("cover_asset_id");
   const cover_asset_id =
     cover_asset_id_raw && String(cover_asset_id_raw).trim() !== ""
@@ -124,7 +129,7 @@ export async function updateArticleTR(formData: FormData) {
     }
   }
 
-  // 1) articles update (status + category + cover)
+  // 1) articles update
   const { error: aErr } = await supabase
     .from("articles")
     .update({ status, category_id, cover_asset_id })
@@ -149,67 +154,22 @@ export async function updateArticleTR(formData: FormData) {
 
   if (tErr) throw new Error(tErr.message);
 
+  // ✅ Preview/edit cache kır
+  revalidatePath(`/dashboard/articles/${id}/preview`);
+  revalidatePath(`/dashboard/articles/${id}/edit`);
   revalidatePath("/dashboard/articles");
+}
+
+export async function updateArticleTR(formData: FormData) {
+  await updateArticleTRNoRedirect(formData);
   redirect("/dashboard/articles");
 }
 
-// ✅ Upload eder → assets’e kaydeder → article.cover_asset_id’ye bağlar
-export async function uploadCoverForArticle(formData: FormData): Promise<void> {
-  await requireAdmin();
-  const admin = getAdminSupabase();
+export async function saveAndPreviewTR(formData: FormData) {
+  await updateArticleTRNoRedirect(formData);
 
-  const article_id = String(formData.get("article_id") || "").trim();
-  if (!article_id) throw new Error("article_id eksik");
+  const id = String(formData.get("id") || "").trim();
+  if (!id) throw new Error("ID eksik");
 
-  const file = formData.get("file") as File | null;
-  if (!file) throw new Error("Dosya seçilmedi.");
-
-  const bucket = "media";
-
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-
-  const ext = extFromFilename(file.name) || "";
-  const fileId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  const path = `covers/${yyyy}-${mm}/${fileId}${ext}`;
-
-  // 1) Storage upload
-  const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
-    contentType: file.type || "application/octet-stream",
-    upsert: false,
-  });
-  if (upErr) throw new Error(upErr.message);
-
-  // 2) assets insert + id al
-  const { data: inserted, error: insErr } = await admin
-    .from("assets")
-    .insert({
-      bucket,
-      path,
-      content_type: file.type || null,
-      bytes: file.size,
-    })
-    .select("id")
-    .single();
-
-  if (insErr) throw new Error(insErr.message);
-  if (!inserted?.id) throw new Error("Asset ID alınamadı.");
-
-  // 3) article cover bağla
-  const { error: artErr } = await admin
-    .from("articles")
-    .update({ cover_asset_id: inserted.id })
-    .eq("id", article_id);
-
-  if (artErr) throw new Error(artErr.message);
-
-  revalidatePath(`/dashboard/articles/${article_id}/edit`);
-  revalidatePath("/dashboard/articles");
-
-  redirect(`/dashboard/articles/${article_id}/edit`);
+  redirect(`/dashboard/articles/${id}/preview`);
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { updateArticleTR, uploadCoverForArticle } from "./actions";
+import { updateArticleTR, uploadCoverForArticle, saveAndPreviewTR } from "./actions";
 import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };

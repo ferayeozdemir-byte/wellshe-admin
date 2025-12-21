@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 
+// ✅ Cache kapat: Preview her zaman güncel DB datasını görsün
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ArticlePreviewPage({
   params,
 }: {
@@ -13,7 +17,7 @@ export default async function ArticlePreviewPage({
   await requireAdmin();
   const supabase = await createClient();
 
-  // 🔹 Article (category_id dahil)
+  // Article
   const { data: article, error: aErr } = await supabase
     .from("articles")
     .select("id, status, category_id")
@@ -22,7 +26,7 @@ export default async function ArticlePreviewPage({
 
   if (aErr || !article) notFound();
 
-  // 🔹 Translation
+  // Translation
   const { data: tr, error: tErr } = await supabase
     .from("article_translations")
     .select("title, summary, content_html")
@@ -32,33 +36,25 @@ export default async function ArticlePreviewPage({
 
   if (tErr || !tr) notFound();
 
-  // 🔹 Category label map
-  const categoryLabelMap: Record<string, string> = {
-    healthy_eating: "Sağlıklı beslenme",
-    sport: "Spor",
-    home_living: "Ev/Yaşam",
-    wellbeing: "Wellbeing",
-    relationships: "İlişkiler",
-    fashion: "Moda",
-    beauty: "Güzellik",
-    astrology: "Astroloji",
-    travel: "Seyahat",
-  };
+  // ✅ Kategori adı DB’den çekilir (map değil)
+  let categoryLabel = "-";
+  if (article.category_id) {
+    const { data: cat, error: catErr } = await supabase
+      .from("categories")
+      .select("title_tr")
+      .eq("id", article.category_id)
+      .single();
 
-  const categoryLabel =
-    article.category_id
-      ? categoryLabelMap[article.category_id] ?? article.category_id
-      : "-";
+    if (!catErr && cat?.title_tr) categoryLabel = cat.title_tr;
+    else categoryLabel = String(article.category_id); // fallback
+  }
 
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Preview (Mobile)</h1>
 
-        <Link
-          href={`/dashboard/articles/${id}/edit`}
-          style={{ textDecoration: "none" }}
-        >
+        <Link href={`/dashboard/articles/${id}/edit`} style={{ textDecoration: "none" }}>
           ← Back to Edit
         </Link>
 
@@ -68,7 +64,6 @@ export default async function ArticlePreviewPage({
       </div>
 
       <div style={{ marginTop: 16, display: "grid", placeItems: "center" }}>
-        {/* Telefon çerçevesi */}
         <div
           style={{
             width: 390,
@@ -81,38 +76,27 @@ export default async function ArticlePreviewPage({
           }}
         >
           <div style={{ padding: 16, paddingBottom: 32 }}>
-            {/* 🔹 KATEGORİ (ARTIK DİNAMİK) */}
             <div style={{ fontSize: 14, color: "#888", marginBottom: 4 }}>
               {categoryLabel}
             </div>
 
-            {/* Title */}
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                marginBottom: 12,
-              }}
-            >
-              {tr.title || "Başlıksız"}
+            <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
+              {tr.title?.trim() ? tr.title : "Başlıksız"}
             </div>
 
-            {/* Content */}
             <div
-              style={{
-                fontSize: 15,
-                lineHeight: "22px",
-                color: "#111",
-              }}
+              style={{ fontSize: 15, lineHeight: "22px", color: "#111" }}
               dangerouslySetInnerHTML={{
-                __html: tr.content_html || "<p><em>İçerik boş.</em></p>",
+                __html:
+                  tr.content_html?.trim()
+                    ? tr.content_html
+                    : "<p><em>İçerik boş.</em></p>",
               }}
             />
           </div>
         </div>
       </div>
 
-      {/* Inline typography */}
       <style>{`
         p { margin: 0 0 16px 0; }
         h2 { font-size: 18px; font-weight: 600; margin: 16px 0 8px; }
