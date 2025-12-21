@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 
@@ -10,8 +10,10 @@ export type AssetMiniRow = {
   bucket: string;
   path: string;
   created_at: string | null;
-  bytes?: number | null;
-  content_type?: string | null;
+  bytes: number | null;
+  content_type: string | null;
+  width: number | null;
+  height: number | null;
 };
 
 function publicAssetUrl(bucket: string, path: string) {
@@ -24,56 +26,45 @@ function bytesToMB(bytes: number) {
   return bytes / (1024 * 1024);
 }
 
-function isLikelyImage(a: AssetMiniRow) {
-  const ct = (a.content_type || "").toLowerCase();
-  if (ct.startsWith("image/")) return true;
-  return /\.(png|jpe?g|webp|gif|svg)$/i.test(a.path);
-}
-
-function isLikelyAudio(a: AssetMiniRow) {
-  const ct = (a.content_type || "").toLowerCase();
-  if (ct.startsWith("audio/")) return true;
-  return /\.(mp3|m4a|aac|wav|ogg)$/i.test(a.path);
-}
-
-const DEFAULT_AUDIO_TITLE = "Okumak istemiyorsan dinle <3";
-
-function buildAudioBlockHtml(src: string, title = DEFAULT_AUDIO_TITLE) {
-  const safeTitle = title.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  return `
-<div class="ws-audio" data-ws-audio="1">
-  <div class="ws-audio-title">${safeTitle}</div>
-  <audio controls preload="none" src="${src}"></audio>
-</div>
-`;
-}
-
-function stripExistingAudioBlock(html: string) {
-  // data-ws-audio="1" olan bloğu kaldır
-  return (html || "").replace(
-    /<div class="ws-audio"[^>]*data-ws-audio="1"[^>]*>[\s\S]*?<\/div>\s*/g,
-    ""
-  );
-}
-
 export default function ContentEditor({
   name,
   initialHTML,
   assets,
-  maxImageBytes = 2 * 1024 * 1024,
-  maxAudioBytes = 8 * 1024 * 1024,
-  audioTitle = DEFAULT_AUDIO_TITLE,
+  maxBytes = 2 * 1024 * 1024, // 2MB
+  maxWidth = 2400, // ölçü uyarısı için eşik (istersen değiştir)
+  maxHeight = 2400,
 }: {
-  name: string;
+  name: string; // form input name (content_html)
   initialHTML: string;
   assets: AssetMiniRow[];
-  maxImageBytes?: number;
-  maxAudioBytes?: number;
-  audioTitle?: string;
+  maxBytes?: number;
+  maxWidth?: number;
+  maxHeight?: number;
 }) {
-  const [isImagePickerOpen, setImagePickerOpen] = useState(false);
-  const [isAudioPickerOpen, setAudioPickerOpen] = useState(false);
+  const [isPickerOpen, setPickerOpen] = useState(false);
   const [html, setHtml] = useState(initialHTML ?? "");
+
+  const imageAssets = useMemo(() => {
+    return (assets ?? []).filter((a) => (a.content_type ?? "").startsWith("image/"));
+  }, [assets]);
+
+  const bigIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of imageAssets) {
+      if (typeof a.bytes === "number" && a.bytes > maxBytes) set.add(a.id);
+    }
+    return set;
+  }, [imageAssets, maxBytes]);
+
+  const hugeDimIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of imageAssets) {
+      const w = a.width ?? 0;
+      const h = a.height ?? 0;
+      if (w >= maxWidth || h >= maxHeight) set.add(a.id);
+    }
+    return set;
+  }, [imageAssets, maxWidth, maxHeight]);
 
   const editor = useEditor({
     extensions: [
@@ -81,115 +72,63 @@ export default function ContentEditor({
       Image.configure({
         inline: false,
         allowBase64: false,
-        HTMLAttributes: { loading: "lazy" },
+        HTMLAttributes: {
+          loading: "lazy",
+        },
       }),
     ],
     content: initialHTML ?? "",
     onUpdate({ editor }) {
       setHtml(editor.getHTML());
     },
+    editorProps: {
+      attributes: {
+        class: "wellshe-editor", // CSS ile kontrol edeceğiz
+      },
+    },
   });
-
-  const bigImageIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of assets ?? []) {
-      if (!isLikelyImage(a)) continue;
-      if (typeof a.bytes === "number" && a.bytes > maxImageBytes) set.add(a.id);
-    }
-    return set;
-  }, [assets, maxImageBytes]);
-
-  const bigAudioIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of assets ?? []) {
-      if (!isLikelyAudio(a)) continue;
-      if (typeof a.bytes === "number" && a.bytes > maxAudioBytes) set.add(a.id);
-    }
-    return set;
-  }, [assets, maxAudioBytes]);
-
-  function confirmBig(asset: AssetMiniRow, type: "image" | "audio") {
-    const isBig =
-      type === "image" ? bigImageIds.has(asset.id) : bigAudioIds.has(asset.id);
-
-    if (!isBig) return true;
-
-    const mb =
-      typeof asset.bytes === "number" ? bytesToMB(asset.bytes).toFixed(2) : "";
-    const limitMb =
-      type === "image"
-        ? bytesToMB(maxImageBytes).toFixed(0)
-        : bytesToMB(maxAudioBytes).toFixed(0);
-
-    return confirm(
-      `${type === "image" ? "Görsel" : "Ses"} büyük görünüyor (${mb} MB). ` +
-        `Limitiniz ${limitMb} MB. Yine de eklemek istiyor musunuz?`
-    );
-  }
 
   function insertImageFromAsset(asset: AssetMiniRow) {
     if (!editor) return;
 
     const url = publicAssetUrl(asset.bucket, asset.path);
     if (!url) {
-      alert("NEXT_PUBLIC_SUPABASE_URL tanımlı değil. Vercel env kontrol edin.");
+      alert("NEXT_PUBLIC_SUPABASE_URL tanımlı değil. Vercel Env kontrol edin.");
       return;
     }
 
-    if (!confirmBig(asset, "image")) return;
+    // 2MB uyarısı
+    const isBig = bigIds.has(asset.id);
+    if (isBig) {
+      const mb = typeof asset.bytes === "number" ? bytesToMB(asset.bytes).toFixed(2) : "?";
+      const ok = confirm(`Bu görsel büyük görünüyor (${mb} MB). Yine de eklemek istiyor musunuz?`);
+      if (!ok) return;
+    }
+
+    // ölçü uyarısı
+    const isHugeDim = hugeDimIds.has(asset.id);
+    if (isHugeDim) {
+      const w = asset.width ?? "?";
+      const h = asset.height ?? "?";
+      const ok = confirm(`Bu görselin ölçüsü büyük (${w}×${h}). Yine de eklemek istiyor musunuz?`);
+      if (!ok) return;
+    }
 
     editor.chain().focus().setImage({ src: url }).run();
-    setImagePickerOpen(false);
-  }
-
-  function setAudioFromAsset(asset: AssetMiniRow) {
-    if (!editor) return;
-
-    const url = publicAssetUrl(asset.bucket, asset.path);
-    if (!url) {
-      alert("NEXT_PUBLIC_SUPABASE_URL tanımlı değil. Vercel env kontrol edin.");
-      return;
-    }
-
-    if (!confirmBig(asset, "audio")) return;
-
-    // İçerikte varsa eski audio bloğunu kaldırıp başa ekle
-    const current = editor.getHTML();
-    const cleaned = stripExistingAudioBlock(current);
-    const audioHtml = buildAudioBlockHtml(url, audioTitle);
-
-    editor.commands.setContent(audioHtml + cleaned, false);
-    setAudioPickerOpen(false);
-  }
-
-  function removeAudioBlock() {
-    if (!editor) return;
-    const cleaned = stripExistingAudioBlock(editor.getHTML());
-    editor.commands.setContent(cleaned, false);
+    setPickerOpen(false);
   }
 
   if (!editor) return null;
-
-  const imageAssets = (assets ?? []).filter(isLikelyImage);
-  const audioAssets = (assets ?? []).filter(isLikelyAudio);
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {/* Toolbar */}
       <div style={toolbar}>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          style={btn}
-        >
+        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} style={btn}>
           Bold
         </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          style={btn}
-        >
+        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} style={btn}>
           Italic
         </button>
 
@@ -209,127 +148,36 @@ export default function ContentEditor({
           H3
         </button>
 
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          style={btn}
-        >
+        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} style={btn}>
           • Liste
         </button>
 
         <button
           type="button"
-          onClick={() => setImagePickerOpen(true)}
+          onClick={() => setPickerOpen(true)}
           style={{ ...btn, fontWeight: 900 }}
         >
           📷 Görsel Ekle (Assets)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAudioPickerOpen(true)}
-          style={{ ...btn, fontWeight: 900 }}
-        >
-          🎧 Ses Ekle (Assets)
-        </button>
-
-        <button
-          type="button"
-          onClick={removeAudioBlock}
-          style={{ ...btn, opacity: 0.85 }}
-          title="İçerikteki ses bloğunu kaldır"
-        >
-          Ses Kaldır
         </button>
       </div>
 
       {/* Editor */}
       <div style={editorBox}>
         <EditorContent editor={editor} />
-
-        {/* TipTap stilleri */}
-        <style>{`
-          .ProseMirror {
-            outline: none;
-            min-height: 260px;
-            padding: 6px 4px;
-            font-size: 15px;
-            line-height: 24px;
-            font-weight: 400;
-            color: #111;
-            caret-color: #111; /* imleç görünür */
-          }
-
-          .ProseMirror p { margin: 0 0 14px 0; }
-
-          .ProseMirror h2 {
-            margin: 18px 0 10px;
-            font-size: 20px;
-            line-height: 28px;
-            font-weight: 700;
-          }
-
-          .ProseMirror h3 {
-            margin: 16px 0 8px;
-            font-size: 17px;
-            line-height: 24px;
-            font-weight: 650;
-          }
-
-          .ProseMirror strong { font-weight: 700; }
-
-          .ProseMirror ul {
-            margin: 0 0 14px 0;
-            padding-left: 18px;
-          }
-
-          .ProseMirror li { margin: 0 0 8px 0; }
-
-          /* Editörde görseller küçük görünsün */
-          .ProseMirror img {
-            display: block;
-            max-width: min(420px, 100%);
-            width: 100%;
-            height: auto;
-            border-radius: 12px;
-            margin: 10px auto;
-            border: 1px solid #eee;
-          }
-
-          .ProseMirror img.ProseMirror-selectednode {
-            outline: 2px solid #111;
-          }
-
-          /* Editörde audio bloğu */
-          .ProseMirror .ws-audio {
-            border: 1px solid #eee;
-            border-radius: 12px;
-            padding: 12px;
-            background: #fafafa;
-            margin: 0 0 14px 0;
-          }
-          .ProseMirror .ws-audio-title {
-            font-weight: 800;
-            margin-bottom: 8px;
-          }
-          .ProseMirror .ws-audio audio {
-            width: 100%;
-          }
-        `}</style>
       </div>
 
-      {/* FormData için hidden */}
+      {/* Form submit için hidden */}
       <textarea name={name} value={html} readOnly style={{ display: "none" }} />
 
-      {/* IMAGE PICKER */}
-      {isImagePickerOpen && (
-        <div style={modalOverlay} onClick={() => setImagePickerOpen(false)}>
+      {/* Picker Modal */}
+      {isPickerOpen && (
+        <div style={modalOverlay} onClick={() => setPickerOpen(false)}>
           <div style={modal} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ fontWeight: 900 }}>Assets’ten Görsel Seç</div>
               <button
                 type="button"
-                onClick={() => setImagePickerOpen(false)}
+                onClick={() => setPickerOpen(false)}
                 style={{ marginLeft: "auto", ...btn }}
               >
                 Kapat
@@ -337,13 +185,14 @@ export default function ContentEditor({
             </div>
 
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-              2MB üzeri görseller “Büyük” diye işaretlenir.
+              Not: Sadece <b>image/*</b> olanlar listelenir. 2MB+ veya yüksek çözünürlükte uyarı verir.
             </div>
 
             <div style={assetGrid}>
               {imageAssets.map((a) => {
                 const url = publicAssetUrl(a.bucket, a.path);
-                const isBig = bigImageIds.has(a.id);
+                const isBig = bigIds.has(a.id);
+                const isHuge = hugeDimIds.has(a.id);
 
                 return (
                   <button
@@ -353,19 +202,23 @@ export default function ContentEditor({
                     style={assetCard}
                     title={a.path}
                   >
-                    <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>
-                      {a.path}
-                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>{a.path}</div>
 
-                    <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
                       {isBig && (
                         <span style={badge}>
-                          Büyük
-                          {typeof a.bytes === "number"
-                            ? ` (${bytesToMB(a.bytes).toFixed(2)} MB)`
-                            : ""}
+                          2MB+
+                          {typeof a.bytes === "number" ? ` (${bytesToMB(a.bytes).toFixed(2)} MB)` : ""}
                         </span>
                       )}
+
+                      {isHuge && (
+                        <span style={badgeDim}>
+                          Büyük ölçü
+                          {(a.width && a.height) ? ` (${a.width}×${a.height})` : ""}
+                        </span>
+                      )}
+
                       <span style={{ fontSize: 12, opacity: 0.65 }}>{a.bucket}</span>
                     </div>
 
@@ -391,69 +244,68 @@ export default function ContentEditor({
         </div>
       )}
 
-      {/* AUDIO PICKER */}
-      {isAudioPickerOpen && (
-        <div style={modalOverlay} onClick={() => setAudioPickerOpen(false)}>
-          <div style={modal} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ fontWeight: 900 }}>Assets’ten Ses Dosyası Seç</div>
-              <button
-                type="button"
-                onClick={() => setAudioPickerOpen(false)}
-                style={{ marginLeft: "auto", ...btn }}
-              >
-                Kapat
-              </button>
-            </div>
+      {/* TipTap CSS */}
+      <style>{`
+        .wellshe-editor.ProseMirror {
+          outline: none;
+          min-height: 260px;
+          padding: 8px 6px;
+          font-size: 15px;
+          line-height: 24px;
+          font-weight: 400;
+          color: #111;
+          caret-color: #111; /* ✅ imleç görünür */
+        }
 
-            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-              {bytesToMB(maxAudioBytes).toFixed(0)}MB üzeri dosyalarda uyarı alırsınız.
-              (mp3 / m4a / wav / ogg)
-            </div>
+        .wellshe-editor.ProseMirror p {
+          margin: 0 0 14px 0;
+        }
 
-            <div style={assetGrid}>
-              {audioAssets.map((a) => {
-                const isBig = bigAudioIds.has(a.id);
+        .wellshe-editor.ProseMirror h2 {
+          margin: 18px 0 10px;
+          font-size: 20px;
+          line-height: 28px;
+          font-weight: 750;
+        }
 
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setAudioFromAsset(a)}
-                    style={assetCard}
-                    title={a.path}
-                  >
-                    <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>
-                      {a.path}
-                    </div>
+        .wellshe-editor.ProseMirror h3 {
+          margin: 16px 0 8px;
+          font-size: 17px;
+          line-height: 24px;
+          font-weight: 650;
+        }
 
-                    <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                      {isBig && (
-                        <span style={badge}>
-                          Büyük
-                          {typeof a.bytes === "number"
-                            ? ` (${bytesToMB(a.bytes).toFixed(2)} MB)`
-                            : ""}
-                        </span>
-                      )}
-                      <span style={{ fontSize: 12, opacity: 0.65 }}>{a.bucket}</span>
-                    </div>
+        .wellshe-editor.ProseMirror strong {
+          font-weight: 700;
+        }
 
-                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                      Seçince içerik başına “{audioTitle}” bloğu eklenir.
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+        .wellshe-editor.ProseMirror ul {
+          margin: 0 0 14px 0;
+          padding-left: 18px;
+        }
+
+        .wellshe-editor.ProseMirror li {
+          margin: 0 0 8px 0;
+        }
+
+        /* ✅ Editörde görseller küçük görünsün */
+        .wellshe-editor.ProseMirror img {
+          display: block;
+          max-width: min(420px, 100%);
+          width: 100%;
+          height: auto;
+          border-radius: 12px;
+          margin: 10px auto;
+          border: 1px solid #eee;
+        }
+
+        .wellshe-editor.ProseMirror img.ProseMirror-selectednode {
+          outline: 2px solid #111;
+        }
+      `}</style>
     </div>
   );
 }
-
-/* ---------------- styles ---------------- */
 
 const btn: React.CSSProperties = {
   padding: "8px 10px",
@@ -528,4 +380,13 @@ const badge: React.CSSProperties = {
   borderRadius: 999,
   border: "1px solid #f0b",
   background: "#fff0f6",
+};
+
+const badgeDim: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  padding: "3px 8px",
+  borderRadius: 999,
+  border: "1px solid #0b6",
+  background: "#f0fff8",
 };

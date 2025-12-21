@@ -19,6 +19,16 @@ type AssetMiniRow = {
   height: number | null;
 };
 
+type TrRow = {
+  title: string | null;
+  summary: string | null;
+  content_html: string | null;
+  slug: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  audio_asset_id: string | null;
+};
+
 export default async function EditArticlePage({
   params,
 }: {
@@ -44,7 +54,7 @@ export default async function EditArticlePage({
     )
     .eq("article_id", id)
     .eq("lang", "tr")
-    .single();
+    .single<TrRow>();
 
   const { data: categories, error: cErr } = await supabase
     .from("categories")
@@ -52,20 +62,22 @@ export default async function EditArticlePage({
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
-  const { data: assets, error: asErr } = await supabase
+  const { data: assetsData, error: asErr } = await supabase
     .from("assets")
     .select("id,bucket,path,created_at,bytes,content_type,width,height")
     .order("created_at", { ascending: false })
     .limit(200);
 
-  const trData = tr ?? {
-    title: "",
-    summary: "",
-    content_html: "",
-    slug: "",
-    seo_title: "",
-    seo_description: "",
-    audio_asset_id: null as string | null,
+  const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
+
+  const trData = {
+    title: tr?.title ?? "",
+    summary: tr?.summary ?? "",
+    content_html: tr?.content_html ?? "",
+    slug: tr?.slug ?? "",
+    seo_title: tr?.seo_title ?? "",
+    seo_description: tr?.seo_description ?? "",
+    audio_asset_id: tr?.audio_asset_id ?? null,
   };
 
   return (
@@ -177,11 +189,9 @@ export default async function EditArticlePage({
           >
             <option value="">- Ses ekleme -</option>
 
-            {(assets ?? [])
-              .filter((a: AssetMiniRow) =>
-                String(a.content_type ?? "").startsWith("audio/")
-              )
-              .map((a: AssetMiniRow) => (
+            {assets
+              .filter((a) => String(a.content_type ?? "").startsWith("audio/"))
+              .map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.path}
                   {typeof a.bytes === "number"
@@ -206,7 +216,7 @@ export default async function EditArticlePage({
             style={input}
           >
             <option value="">- Kapak seçmeyin -</option>
-            {(assets ?? []).map((a: AssetMiniRow) => (
+            {assets.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.path}
               </option>
@@ -234,7 +244,7 @@ export default async function EditArticlePage({
           <ContentEditor
             name="content_html"
             initialHTML={trData.content_html}
-            assets={(assets ?? []).map((a: AssetMiniRow) => ({
+            assets={assets.map((a) => ({
               id: a.id,
               bucket: a.bucket,
               path: a.path,
@@ -247,7 +257,9 @@ export default async function EditArticlePage({
           />
         </label>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+        >
           <label style={label}>
             <div>Slug (TR)</div>
             <input name="slug" defaultValue={trData.slug} style={input} />
