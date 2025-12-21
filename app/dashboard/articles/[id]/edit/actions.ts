@@ -6,6 +6,8 @@ import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
+/* ----------------- helpers ----------------- */
+
 function slugifyTR(input: string) {
   const s = (input ?? "").trim().toLowerCase();
 
@@ -54,14 +56,15 @@ async function ensureUniqueSlugTR(
 }
 
 function getAdminSupabase() {
-  // ✅ Vercel env isimleri sende böyleydi:
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
+
+  // sizde env isimleri farklı olabildiği için birkaç olasılığı kabul ediyoruz
   const serviceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE ||
-  process.env.SUPABASE_SERVICE_KEY ||
-  "";
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    "";
 
   if (!url) throw new Error("SUPABASE URL env eksik (Vercel).");
   if (!serviceKey) throw new Error("SERVICE ROLE KEY env eksik (Vercel).");
@@ -78,6 +81,8 @@ function extFromFilename(name: string) {
   if (ext.length > 10) return "";
   return ext;
 }
+
+/* ----------------- actions ----------------- */
 
 export async function updateArticleTRNoRedirect(formData: FormData) {
   await requireAdmin();
@@ -125,7 +130,9 @@ export async function updateArticleTRNoRedirect(formData: FormData) {
     if (!slug) missing.push("Slug (TR)");
 
     if (missing.length) {
-      throw new Error(`Published için zorunlu alanlar boş: ${missing.join(", ")}`);
+      throw new Error(
+        `Published için zorunlu alanlar boş: ${missing.join(", ")}`
+      );
     }
   }
 
@@ -154,7 +161,6 @@ export async function updateArticleTRNoRedirect(formData: FormData) {
 
   if (tErr) throw new Error(tErr.message);
 
-  // ✅ Preview/edit cache kır
   revalidatePath(`/dashboard/articles/${id}/preview`);
   revalidatePath(`/dashboard/articles/${id}/edit`);
   revalidatePath("/dashboard/articles");
@@ -172,4 +178,62 @@ export async function saveAndPreviewTR(formData: FormData) {
   if (!id) throw new Error("ID eksik");
 
   redirect(`/dashboard/articles/${id}/preview`);
+}
+
+export async function uploadCoverForArticle(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const admin = getAdminSupabase();
+
+  const article_id = String(formData.get("article_id") || "").trim();
+  if (!article_id) throw new Error("article_id eksik");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("Dosya seçilmedi.");
+
+  const bucket = "media";
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+
+  const ext = extFromFilename(file.name) || "";
+  const fileId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const path = `covers/${yyyy}-${mm}/${fileId}${ext}`;
+
+  const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+    upsert: false,
+  });
+  if (upErr) throw new Error(upErr.message);
+
+  const { data: inserted, error: insErr } = await admin
+    .from("assets")
+    .insert({
+      bucket,
+      path,
+      content_type: file.type || null,
+      bytes: file.size,
+    })
+    .select("id")
+    .single();
+
+  if (insErr) throw new Error(insErr.message);
+  if (!inserted?.id) throw new Error("Asset ID alınamadı.");
+
+  const { error: artErr } = await admin
+    .from("articles")
+    .update({ cover_asset_id: inserted.id })
+    .eq("id", article_id);
+
+  if (artErr) throw new Error(artErr.message);
+
+  revalidatePath(`/dashboard/articles/${article_id}/edit`);
+  revalidatePath(`/dashboard/articles/${article_id}/preview`);
+  revalidatePath("/dashboard/articles");
+
+  redirect(`/dashboard/articles/${article_id}/edit`);
 }

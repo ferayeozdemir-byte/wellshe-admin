@@ -3,10 +3,6 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 
-// ✅ Cache kapat: Preview her zaman güncel DB datasını görsün
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 export default async function ArticlePreviewPage({
   params,
 }: {
@@ -17,16 +13,15 @@ export default async function ArticlePreviewPage({
   await requireAdmin();
   const supabase = await createClient();
 
-  // Article
+  // ✅ categories join ile title_tr çekiyoruz
   const { data: article, error: aErr } = await supabase
     .from("articles")
-    .select("id, status, category_id")
+    .select("id, status, category_id, categories(title_tr)")
     .eq("id", id)
     .single();
 
   if (aErr || !article) notFound();
 
-  // Translation
   const { data: tr, error: tErr } = await supabase
     .from("article_translations")
     .select("title, summary, content_html")
@@ -36,18 +31,9 @@ export default async function ArticlePreviewPage({
 
   if (tErr || !tr) notFound();
 
-  // ✅ Kategori adı DB’den çekilir (map değil)
-  let categoryLabel = "-";
-  if (article.category_id) {
-    const { data: cat, error: catErr } = await supabase
-      .from("categories")
-      .select("title_tr")
-      .eq("id", article.category_id)
-      .single();
-
-    if (!catErr && cat?.title_tr) categoryLabel = cat.title_tr;
-    else categoryLabel = String(article.category_id); // fallback
-  }
+  const categoryLabel =
+    (article as any).categories?.title_tr ??
+    (article.category_id ? String(article.category_id) : "-");
 
   return (
     <div style={{ padding: 24 }}>
@@ -81,16 +67,13 @@ export default async function ArticlePreviewPage({
             </div>
 
             <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
-              {tr.title?.trim() ? tr.title : "Başlıksız"}
+              {tr.title || "Başlıksız"}
             </div>
 
             <div
               style={{ fontSize: 15, lineHeight: "22px", color: "#111" }}
               dangerouslySetInnerHTML={{
-                __html:
-                  tr.content_html?.trim()
-                    ? tr.content_html
-                    : "<p><em>İçerik boş.</em></p>",
+                __html: tr.content_html || "<p><em>İçerik boş.</em></p>",
               }}
             />
           </div>
