@@ -8,6 +8,7 @@ import {
   uploadAudioForArticle,
 } from "./actions";
 import ContentEditor from "./ContentEditor";
+import CoverPicker from "./CoverPicker";
 import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };
@@ -50,15 +51,11 @@ export default async function EditArticlePage({
   // ✅ query string ile action hatalarını sayfada göstermek için
   const coverErrorRaw = searchParams?.coverError;
   const coverError =
-    typeof coverErrorRaw === "string"
-      ? decodeURIComponent(coverErrorRaw)
-      : null;
+    typeof coverErrorRaw === "string" ? decodeURIComponent(coverErrorRaw) : null;
 
   const audioErrorRaw = searchParams?.audioError;
   const audioError =
-    typeof audioErrorRaw === "string"
-      ? decodeURIComponent(audioErrorRaw)
-      : null;
+    typeof audioErrorRaw === "string" ? decodeURIComponent(audioErrorRaw) : null;
 
   const { data: article, error: aErr } = await supabase
     .from("articles")
@@ -70,9 +67,7 @@ export default async function EditArticlePage({
 
   const { data: tr, error: tErr } = await supabase
     .from("article_translations")
-    .select(
-      "title,summary,content_html,slug,seo_title,seo_description,audio_asset_id"
-    )
+    .select("title,summary,content_html,slug,seo_title,seo_description,audio_asset_id")
     .eq("article_id", id)
     .eq("lang", "tr")
     .single<TrRow>();
@@ -90,6 +85,15 @@ export default async function EditArticlePage({
     .limit(200);
 
   const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
+
+  // ✅ filtreli listeler
+  const imageAssets = assets.filter((a) =>
+    String(a.content_type ?? "").startsWith("image/")
+  );
+
+  const audioAssets = assets.filter((a) =>
+    String(a.content_type ?? "").startsWith("audio/")
+  );
 
   const trData = {
     title: tr?.title ?? "",
@@ -109,7 +113,7 @@ export default async function EditArticlePage({
           .data.publicUrl
       : "";
 
-  // ✅ Mevcut audio bilgisi (isterseniz sonradan audio preview de ekleriz)
+  // ✅ Mevcut audio bilgisi
   const currentAudio = assets.find((a) => a.id === trData.audio_asset_id);
 
   return (
@@ -126,18 +130,9 @@ export default async function EditArticlePage({
         </div>
       </div>
 
-      {/* ✅ Action hata mesajları (beyaz 500 ekran yerine burada görünsün) */}
-      {coverError && (
-        <div style={alertErrorBox}>
-          Kapak upload hatası: {coverError}
-        </div>
-      )}
-
-      {audioError && (
-        <div style={alertErrorBox}>
-          Ses upload hatası: {audioError}
-        </div>
-      )}
+      {/* ✅ Action hata mesajları */}
+      {coverError && <div style={alertErrorBox}>Kapak upload hatası: {coverError}</div>}
+      {audioError && <div style={alertErrorBox}>Ses upload hatası: {audioError}</div>}
 
       {tErr && (
         <p style={{ color: "crimson" }}>
@@ -153,7 +148,7 @@ export default async function EditArticlePage({
         <p style={{ color: "crimson" }}>Assets okunamadı: {asErr.message}</p>
       )}
 
-      {/* ✅ Kapak upload + otomatik bağlama (AYRI FORM) */}
+      {/* ✅ Kapak upload + otomatik bağlama */}
       <div
         style={{
           marginTop: 16,
@@ -168,6 +163,7 @@ export default async function EditArticlePage({
 
         <form
           action={uploadCoverForArticle}
+          encType="multipart/form-data"
           style={{
             display: "flex",
             gap: 10,
@@ -214,12 +210,12 @@ export default async function EditArticlePage({
         )}
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
-          makaleye “cover” olarak bağlar.
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu makaleye
+          “cover” olarak bağlar.
         </div>
       </div>
 
-      {/* ✅ Audio upload + otomatik bağlama (AYRI FORM) */}
+      {/* ✅ Audio upload + otomatik bağlama */}
       <div
         style={{
           marginTop: 16,
@@ -234,6 +230,7 @@ export default async function EditArticlePage({
 
         <form
           action={uploadAudioForArticle}
+          encType="multipart/form-data"
           style={{
             display: "flex",
             gap: 10,
@@ -268,10 +265,7 @@ export default async function EditArticlePage({
       </div>
 
       {/* ✅ Ana kayıt formu */}
-      <form
-        action={updateArticleTR}
-        style={{ marginTop: 16, display: "grid", gap: 12 }}
-      >
+      <form action={updateArticleTR} style={{ marginTop: 16, display: "grid", gap: 12 }}>
         <input type="hidden" name="id" value={article.id} />
 
         <label style={label}>
@@ -285,11 +279,7 @@ export default async function EditArticlePage({
 
         <label style={label}>
           <div>Kategori</div>
-          <select
-            name="category_id"
-            defaultValue={article.category_id ?? ""}
-            style={input}
-          >
+          <select name="category_id" defaultValue={article.category_id ?? ""} style={input}>
             <option value="">- Seçiniz -</option>
             {(categories ?? []).map((c: CategoryRow) => (
               <option key={c.id} value={c.id}>
@@ -299,7 +289,7 @@ export default async function EditArticlePage({
           </select>
         </label>
 
-        {/* ✅ Audio seçimi (assets) */}
+        {/* ✅ Audio seçimi */}
         <label style={label}>
           <div>Ses Dosyası (Audio)</div>
           <select
@@ -309,16 +299,14 @@ export default async function EditArticlePage({
           >
             <option value="">- Ses ekleme -</option>
 
-            {assets
-              .filter((a) => String(a.content_type ?? "").startsWith("audio/"))
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.path}
-                  {typeof a.bytes === "number"
-                    ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
-                    : ""}
-                </option>
-              ))}
+            {audioAssets.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.path}
+                {typeof a.bytes === "number"
+                  ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
+                  : ""}
+              </option>
+            ))}
           </select>
 
           <div style={{ fontSize: 12, opacity: 0.7 }}>
@@ -326,25 +314,24 @@ export default async function EditArticlePage({
           </div>
         </label>
 
-        {/* ✅ Cover seçimi (mevcut assetlerden) */}
+        {/* ✅ Cover seçimi (önizlemeli CoverPicker) */}
         <label style={label}>
           <div>Cover (assets)</div>
-          <select
+
+          <CoverPicker
             name="cover_asset_id"
+            assets={imageAssets.map((a) => ({
+              id: a.id,
+              bucket: a.bucket,
+              path: a.path,
+              content_type: a.content_type ?? null,
+              bytes: a.bytes ?? null,
+            }))}
             defaultValue={article.cover_asset_id ?? ""}
-            style={input}
-          >
-            <option value="">- Kapak seçmeyin -</option>
-            {assets.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.path}
-              </option>
-            ))}
-          </select>
+          />
 
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Şu an dropdown yalnızca path gösteriyor. Bir sonraki adımda
-            “seçince önizleme” ekleyeceğiz.
+            Not: Kapak artık önizlemeli seçilir. (Select kaldırıldı.)
           </div>
         </label>
 
@@ -355,12 +342,7 @@ export default async function EditArticlePage({
 
         <label style={label}>
           <div>Özet (TR)</div>
-          <textarea
-            name="summary"
-            defaultValue={trData.summary}
-            rows={3}
-            style={textarea}
-          />
+          <textarea name="summary" defaultValue={trData.summary} rows={3} style={textarea} />
         </label>
 
         <label style={label}>
@@ -381,9 +363,7 @@ export default async function EditArticlePage({
           />
         </label>
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={label}>
             <div>Slug (TR)</div>
             <input name="slug" defaultValue={trData.slug} style={input} />
@@ -391,11 +371,7 @@ export default async function EditArticlePage({
 
           <label style={label}>
             <div>SEO Title</div>
-            <input
-              name="seo_title"
-              defaultValue={trData.seo_title}
-              style={input}
-            />
+            <input name="seo_title" defaultValue={trData.seo_title} style={input} />
           </label>
         </div>
 
@@ -466,7 +442,6 @@ const btnSecondary: CSSProperties = {
   fontWeight: 800,
 };
 
-// ✅ Action hatalarını sayfada göstermek için ortak box
 const alertErrorBox: CSSProperties = {
   marginTop: 12,
   padding: 12,
