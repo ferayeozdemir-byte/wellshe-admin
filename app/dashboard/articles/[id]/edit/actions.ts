@@ -190,65 +190,77 @@ export async function saveAndPreviewTR(formData: FormData) {
 
 export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   await requireAdmin();
-  const admin = getAdminSupabase();
 
   const article_id = String(formData.get("article_id") || "").trim();
   if (!article_id) throw new Error("article_id eksik");
 
-  const file = formData.get("file") as File | null;
-  if (!file) throw new Error("Dosya seçilmedi.");
+  try {
+    const admin = getAdminSupabase();
 
-  const maxBytes = 2 * 1024 * 1024; // 2MB
-  if (file.size > maxBytes) {
-    throw new Error("Kapak görseli 2 MB’tan büyük. Lütfen görseli sıkıştırın.");
+    const file = formData.get("file") as File | null;
+    if (!file) throw new Error("Dosya seçilmedi.");
+
+    const maxBytes = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxBytes) {
+      throw new Error("Kapak görseli 2 MB’tan büyük. Lütfen görseli sıkıştırın.");
+    }
+
+    const bucket = "media";
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+
+    const ext = extFromFilename(file.name) || "";
+    const fileId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const path = `covers/${yyyy}-${mm}/${fileId}${ext}`;
+
+    const { error: upErr } = await admin.storage
+      .from(bucket)
+      .upload(path, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+    if (upErr) throw new Error(upErr.message);
+
+    const { data: inserted, error: insErr } = await admin
+      .from("assets")
+      .insert({
+        bucket,
+        path,
+        content_type: file.type || null,
+        bytes: file.size,
+      })
+      .select("id")
+      .single();
+
+    if (insErr) throw new Error(insErr.message);
+    if (!inserted?.id) throw new Error("Asset ID alınamadı.");
+
+    const { error: artErr } = await admin
+      .from("articles")
+      .update({ cover_asset_id: inserted.id })
+      .eq("id", article_id);
+
+    if (artErr) throw new Error(artErr.message);
+
+    revalidatePath(`/dashboard/articles/${article_id}/edit`);
+    revalidatePath(`/dashboard/articles/${article_id}/preview`);
+    revalidatePath("/dashboard/articles");
+
+    redirect(`/dashboard/articles/${article_id}/edit`);
+  } catch (e: any) {
+    const msg = String(e?.message ?? "Kapak upload sırasında hata oluştu.");
+    redirect(
+      `/dashboard/articles/${article_id}/edit?coverError=${encodeURIComponent(
+        msg
+      )}`
+    );
   }
-
-  const bucket = "media";
-
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-
-  const ext = extFromFilename(file.name) || "";
-  const fileId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  const path = `covers/${yyyy}-${mm}/${fileId}${ext}`;
-
-  const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
-    contentType: file.type || "application/octet-stream",
-    upsert: false,
-  });
-  if (upErr) throw new Error(upErr.message);
-
-  const { data: inserted, error: insErr } = await admin
-    .from("assets")
-    .insert({
-      bucket,
-      path,
-      content_type: file.type || null,
-      bytes: file.size,
-    })
-    .select("id")
-    .single();
-
-  if (insErr) throw new Error(insErr.message);
-  if (!inserted?.id) throw new Error("Asset ID alınamadı.");
-
-  const { error: artErr } = await admin
-    .from("articles")
-    .update({ cover_asset_id: inserted.id })
-    .eq("id", article_id);
-
-  if (artErr) throw new Error(artErr.message);
-
-  revalidatePath(`/dashboard/articles/${article_id}/edit`);
-  revalidatePath(`/dashboard/articles/${article_id}/preview`);
-  revalidatePath("/dashboard/articles");
-
-  redirect(`/dashboard/articles/${article_id}/edit`);
 }
 
 /* ✅ NEW: Audio upload + otomatik TR bağlama */

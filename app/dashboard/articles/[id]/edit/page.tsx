@@ -2,7 +2,11 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { updateArticleTR, uploadCoverForArticle, uploadAudioForArticle } from "./actions";
+import {
+  updateArticleTR,
+  uploadCoverForArticle,
+  uploadAudioForArticle,
+} from "./actions";
 import ContentEditor from "./ContentEditor";
 import type { CSSProperties } from "react";
 
@@ -31,13 +35,30 @@ type TrRow = {
 
 export default async function EditArticlePage({
   params,
+  searchParams,
 }: {
   params: { id: string } | Promise<{ id: string }>;
+  searchParams?: { [key: string]: string | string[] | undefined };
 }) {
-  const { id } = await Promise.resolve(params);
-
   await requireAdmin();
   const supabase = await createClient();
+
+  // ✅ params Promise olabileceği için güvenli çöz
+  const resolvedParams = await Promise.resolve(params);
+  const id = resolvedParams.id;
+
+  // ✅ query string ile action hatalarını sayfada göstermek için
+  const coverErrorRaw = searchParams?.coverError;
+  const coverError =
+    typeof coverErrorRaw === "string"
+      ? decodeURIComponent(coverErrorRaw)
+      : null;
+
+  const audioErrorRaw = searchParams?.audioError;
+  const audioError =
+    typeof audioErrorRaw === "string"
+      ? decodeURIComponent(audioErrorRaw)
+      : null;
 
   const { data: article, error: aErr } = await supabase
     .from("articles")
@@ -80,6 +101,17 @@ export default async function EditArticlePage({
     audio_asset_id: tr?.audio_asset_id ?? null,
   };
 
+  // ✅ Mevcut kapak önizleme URL’i üret
+  const currentCover = assets.find((a) => a.id === article.cover_asset_id);
+  const coverPreviewUrl =
+    currentCover?.bucket && currentCover?.path
+      ? supabase.storage.from(currentCover.bucket).getPublicUrl(currentCover.path)
+          .data.publicUrl
+      : "";
+
+  // ✅ Mevcut audio bilgisi (isterseniz sonradan audio preview de ekleriz)
+  const currentAudio = assets.find((a) => a.id === trData.audio_asset_id);
+
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -93,6 +125,19 @@ export default async function EditArticlePage({
           ID: {article.id}
         </div>
       </div>
+
+      {/* ✅ Action hata mesajları (beyaz 500 ekran yerine burada görünsün) */}
+      {coverError && (
+        <div style={alertErrorBox}>
+          Kapak upload hatası: {coverError}
+        </div>
+      )}
+
+      {audioError && (
+        <div style={alertErrorBox}>
+          Ses upload hatası: {audioError}
+        </div>
+      )}
 
       {tErr && (
         <p style={{ color: "crimson" }}>
@@ -141,49 +186,86 @@ export default async function EditArticlePage({
           </Link>
         </form>
 
+        {/* ✅ Mevcut kapak önizleme */}
+        {coverPreviewUrl ? (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+              Mevcut kapak önizleme:
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={coverPreviewUrl}
+              alt="cover preview"
+              style={{
+                width: 260,
+                height: "auto",
+                borderRadius: 12,
+                border: "1px solid #eee",
+              }}
+            />
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+              {currentCover?.path ?? ""}
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.65 }}>
+            Bu makaleye bağlı bir kapak yok.
+          </div>
+        )}
+
         <div style={{ fontSize: 12, opacity: 0.7 }}>
           Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
           makaleye “cover” olarak bağlar.
         </div>
       </div>
 
-      {/* ✅ NEW: Audio upload + otomatik bağlama (AYRI FORM) */}
+      {/* ✅ Audio upload + otomatik bağlama (AYRI FORM) */}
       <div
-  style={{
-    marginTop: 16,
-    padding: 12,
-    border: "1px solid #eee",
-    borderRadius: 12,
-    display: "grid",
-    gap: 10,
-  }}
->
-  <div style={{ fontWeight: 800 }}>Ses Dosyası (Upload)</div>
+        style={{
+          marginTop: 16,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Ses Dosyası (Upload)</div>
 
-  <form
-    action={uploadAudioForArticle}
-    style={{
-      display: "flex",
-      gap: 10,
-      alignItems: "center",
-      flexWrap: "wrap",
-    }}
-  >
-    <input type="hidden" name="article_id" value={article.id} />
-    <input type="file" name="file" accept="audio/*,.mp3,.mpeg" required />
-    <button type="submit" style={btnSecondary}>
-      Ses Upload + Otomatik Bağla
-    </button>
+        <form
+          action={uploadAudioForArticle}
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <input type="hidden" name="article_id" value={article.id} />
+          <input type="file" name="file" accept="audio/*,.mp3,.mpeg" required />
+          <button type="submit" style={btnSecondary}>
+            Ses Upload + Otomatik Bağla
+          </button>
 
-    <Link href="/dashboard/assets" style={btnSecondaryLink}>
-      Assets’e Git
-    </Link>
-  </form>
+          <Link href="/dashboard/assets" style={btnSecondaryLink}>
+            Assets’e Git
+          </Link>
+        </form>
 
-  <div style={{ fontSize: 12, opacity: 0.7 }}>
-    Not: Önce makaleyi “Save” edip TR kaydı oluşsun. Sonra ses yükleyin.
-  </div>
-</div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          Not: Önce makaleyi “Save” edip TR kaydı oluşsun. Sonra ses yükleyin.
+        </div>
+
+        {currentAudio ? (
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Bağlı ses: <b>{currentAudio.path}</b>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.65 }}>
+            Bu makaleye bağlı bir ses yok.
+          </div>
+        )}
+      </div>
 
       {/* ✅ Ana kayıt formu */}
       <form
@@ -259,6 +341,11 @@ export default async function EditArticlePage({
               </option>
             ))}
           </select>
+
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            Not: Şu an dropdown yalnızca path gösteriyor. Bir sonraki adımda
+            “seçince önizleme” ekleyeceğiz.
+          </div>
         </label>
 
         <label style={label}>
@@ -376,5 +463,16 @@ const btnSecondary: CSSProperties = {
   background: "#fff",
   color: "#111",
   cursor: "pointer",
+  fontWeight: 800,
+};
+
+// ✅ Action hatalarını sayfada göstermek için ortak box
+const alertErrorBox: CSSProperties = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid rgba(220,20,60,0.35)",
+  background: "rgba(220,20,60,0.08)",
+  color: "crimson",
   fontWeight: 800,
 };
