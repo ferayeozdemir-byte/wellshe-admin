@@ -262,15 +262,40 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   const file = formData.get("file") as File | null;
   if (!file) throw new Error("Dosya seçilmedi.");
 
-  // Audio dosyaları genelde 2MB’ı aşar; burada daha makul limit koyuyoruz.
+  // Audio dosyaları genelde 2MB’ı aşar; makul limit:
   const maxBytes = 20 * 1024 * 1024; // 20MB
   if (file.size > maxBytes) {
     throw new Error("Ses dosyası 20 MB’tan büyük. Lütfen dosyayı küçültün.");
   }
 
-  const ct = file.type || "application/octet-stream";
-  if (!ct.startsWith("audio/")) {
-    throw new Error(`Bu dosya audio değil (type: ${ct}).`);
+  const ext = extFromFilename(file.name) || "";
+  const rawType = (file.type || "").toLowerCase();
+
+  // ✅ Daha toleranslı içerik tipi belirleme:
+  // - Normalde audio/* ise ok
+  // - .mp3 / .mpeg gibi uzantılarda bazen video/mpeg veya boş gelir -> audio/mpeg’e çevir
+  let finalContentType = rawType;
+
+  const isAudioByType = rawType.startsWith("audio/");
+  const isMpegByType = rawType === "video/mpeg" || rawType === "audio/mpeg";
+  const isOctet = rawType === "" || rawType === "application/octet-stream";
+
+  const isMp3Ext = ext === ".mp3";
+  const isMpegExt = ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
+
+  if (isAudioByType) {
+    finalContentType = rawType;
+  } else if (isMpegByType || isOctet) {
+    if (isMp3Ext || isMpegExt) {
+      finalContentType = "audio/mpeg";
+    }
+  }
+
+  // Hâlâ audio değilse reddet (ama artık mpeg/mp3 kurtuluyor)
+  if (!finalContentType.startsWith("audio/")) {
+    throw new Error(
+      `Bu dosya audio olarak algılanamadı. (type: ${rawType || "boş"}, ext: ${ext || "yok"})`
+    );
   }
 
   const bucket = "media";
@@ -279,7 +304,6 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
 
-  const ext = extFromFilename(file.name) || "";
   const fileId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -288,7 +312,7 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
 
   const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
-    contentType: ct,
+    contentType: finalContentType,
     upsert: false,
   });
   if (upErr) throw new Error(upErr.message);
@@ -298,7 +322,7 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
     .insert({
       bucket,
       path,
-      content_type: ct,
+      content_type: finalContentType, // ✅ burada düzelttik
       bytes: file.size,
     })
     .select("id")
@@ -307,7 +331,6 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   if (insErr) throw new Error(insErr.message);
   if (!inserted?.id) throw new Error("Asset ID alınamadı.");
 
-  // ✅ TR çeviriye audio_asset_id yaz (yoksa oluşturur)
   const { error: trErr } = await admin.from("article_translations").upsert(
     {
       article_id,
