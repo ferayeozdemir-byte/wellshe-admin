@@ -93,7 +93,6 @@ export default async function EditArticlePage({
     String(a.content_type ?? "").startsWith("audio/")
   );
 
-  // ✅ CoverPicker için: sadece image + publicUrl eklenmiş liste (CoverPicker görsel gösterebilsin diye)
   const imageAssetsForPicker = assets
     .filter((a) => String(a.content_type ?? "").startsWith("image/"))
     .map((a) => ({
@@ -115,16 +114,31 @@ export default async function EditArticlePage({
     audio_asset_id: tr?.audio_asset_id ?? null,
   };
 
-  // ✅ Mevcut kapak önizleme URL’i üret
-  const currentCover = assets.find((a) => a.id === article.cover_asset_id);
+  // ✅ Assets sayfasından pick ile dönülürse override edelim
+  const pickCoverRaw = searchParams?.pickCover;
+  const pickedCoverId = typeof pickCoverRaw === "string" ? pickCoverRaw : null;
+
+  const pickAudioRaw = searchParams?.pickAudio;
+  const pickedAudioId = typeof pickAudioRaw === "string" ? pickAudioRaw : null;
+
+  const coverDefaultValue = pickedCoverId ?? (article.cover_asset_id ?? "");
+  const audioDefaultValue = pickedAudioId ?? (trData.audio_asset_id ?? "");
+
+  // ✅ Mevcut kapak önizleme URL’i (defaultValue ile uyumlu)
+  const currentCoverId = coverDefaultValue || null;
+  const currentCover = assets.find((a) => a.id === currentCoverId);
+
   const coverPreviewUrl =
     currentCover?.bucket && currentCover?.path
       ? supabase.storage.from(currentCover.bucket).getPublicUrl(currentCover.path)
           .data.publicUrl
       : "";
 
-  // ✅ Mevcut audio bilgisi
-  const currentAudio = assets.find((a) => a.id === trData.audio_asset_id);
+  // ✅ Mevcut audio bilgisi (defaultValue ile uyumlu)
+  const currentAudioId = audioDefaultValue || null;
+  const currentAudio = assets.find((a) => a.id === currentAudioId);
+
+  const returnTo = `/dashboard/articles/${article.id}/edit`;
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
@@ -149,19 +163,17 @@ export default async function EditArticlePage({
         <div style={alertErrorBox}>Ses upload hatası: {audioError}</div>
       ) : null}
 
-      {tErr && (
-        <p style={{ color: "crimson" }}>
-          TR translation okunamadı: {tErr.message}
-        </p>
-      )}
+      {tErr ? (
+        <p style={{ color: "crimson" }}>TR translation okunamadı: {tErr.message}</p>
+      ) : null}
 
-      {cErr && (
+      {cErr ? (
         <p style={{ color: "crimson" }}>Kategoriler okunamadı: {cErr.message}</p>
-      )}
+      ) : null}
 
-      {asErr && (
+      {asErr ? (
         <p style={{ color: "crimson" }}>Assets okunamadı: {asErr.message}</p>
-      )}
+      ) : null}
 
       {/* ✅ Kapak upload + otomatik bağlama */}
       <div
@@ -192,7 +204,14 @@ export default async function EditArticlePage({
             Kapak Upload + Otomatik Bağla
           </button>
 
-          <Link href="/dashboard/assets" style={btnSecondaryLink}>
+          <Link
+            href={`/dashboard/assets?mode=pick&kind=cover&return_to=${encodeURIComponent(
+              returnTo
+            )}`}
+            target="_blank"
+            rel="noreferrer"
+            style={btnSecondaryLink}
+          >
             Assets’e Git
           </Link>
         </form>
@@ -225,8 +244,8 @@ export default async function EditArticlePage({
         )}
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
-          makaleye “cover” olarak bağlar.
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu makaleye
+          “cover” olarak bağlar.
         </div>
       </div>
 
@@ -259,7 +278,14 @@ export default async function EditArticlePage({
             Ses Upload + Otomatik Bağla
           </button>
 
-          <Link href="/dashboard/assets" style={btnSecondaryLink}>
+          <Link
+            href={`/dashboard/assets?mode=pick&kind=audio&return_to=${encodeURIComponent(
+              returnTo
+            )}`}
+            target="_blank"
+            rel="noreferrer"
+            style={btnSecondaryLink}
+          >
             Assets’e Git
           </Link>
         </form>
@@ -280,10 +306,7 @@ export default async function EditArticlePage({
       </div>
 
       {/* ✅ Ana kayıt formu */}
-      <form
-        action={updateArticleTR}
-        style={{ marginTop: 16, display: "grid", gap: 12 }}
-      >
+      <form action={updateArticleTR} style={{ marginTop: 16, display: "grid", gap: 12 }}>
         <input type="hidden" name="id" value={article.id} />
 
         <label style={label}>
@@ -297,11 +320,7 @@ export default async function EditArticlePage({
 
         <label style={label}>
           <div>Kategori</div>
-          <select
-            name="category_id"
-            defaultValue={article.category_id ?? ""}
-            style={input}
-          >
+          <select name="category_id" defaultValue={article.category_id ?? ""} style={input}>
             <option value="">- Seçiniz -</option>
             {(categories ?? []).map((c: CategoryRow) => (
               <option key={c.id} value={c.id}>
@@ -314,13 +333,8 @@ export default async function EditArticlePage({
         {/* ✅ Audio seçimi */}
         <label style={label}>
           <div>Ses Dosyası (Audio)</div>
-          <select
-            name="audio_asset_id"
-            defaultValue={trData.audio_asset_id ?? ""}
-            style={input}
-          >
+          <select name="audio_asset_id" defaultValue={audioDefaultValue} style={input}>
             <option value="">- Ses ekleme -</option>
-
             {audioAssets.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.path}
@@ -331,26 +345,24 @@ export default async function EditArticlePage({
             ))}
           </select>
 
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Her içerik için tek ses dosyası.
-          </div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>Not: Her içerik için tek ses dosyası.</div>
         </label>
 
         {/* ✅ Cover seçimi (önizlemeli CoverPicker) */}
-        <label style={label}>
+        <div style={label}>
           <div>Cover (assets)</div>
 
           <CoverPicker
             name="cover_asset_id"
             assets={imageAssetsForPicker}
-            defaultValue={article.cover_asset_id ?? ""}
+            defaultValue={coverDefaultValue}
             placeholder="Kapak ara (örn: covers/2025-12)"
           />
 
           <div style={{ fontSize: 12, opacity: 0.7 }}>
             Not: Kapak artık önizlemeli seçilir. (Select kaldırıldı.)
           </div>
-        </label>
+        </div>
 
         <label style={label}>
           <div>Başlık (TR)</div>
@@ -359,12 +371,7 @@ export default async function EditArticlePage({
 
         <label style={label}>
           <div>Özet (TR)</div>
-          <textarea
-            name="summary"
-            defaultValue={trData.summary}
-            rows={3}
-            style={textarea}
-          />
+          <textarea name="summary" defaultValue={trData.summary} rows={3} style={textarea} />
         </label>
 
         <label style={label}>
@@ -385,9 +392,7 @@ export default async function EditArticlePage({
           />
         </label>
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={label}>
             <div>Slug (TR)</div>
             <input name="slug" defaultValue={trData.slug} style={input} />
@@ -395,11 +400,7 @@ export default async function EditArticlePage({
 
           <label style={label}>
             <div>SEO Title</div>
-            <input
-              name="seo_title"
-              defaultValue={trData.seo_title}
-              style={input}
-            />
+            <input name="seo_title" defaultValue={trData.seo_title} style={input} />
           </label>
         </div>
 

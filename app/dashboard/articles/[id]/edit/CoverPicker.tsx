@@ -10,7 +10,7 @@ type Asset = {
   content_type?: string | null;
   width?: number | null;
   height?: number | null;
-  publicUrl?: string; // page.tsx’ten hesaplanıp gelecek
+  publicUrl?: string;
 };
 
 export default function CoverPicker({
@@ -19,8 +19,8 @@ export default function CoverPicker({
   defaultValue,
   placeholder,
 }: {
-  name: string; // "cover_asset_id"
-  assets: Asset[]; // sadece image/* olanlar gelmeli
+  name: string;
+  assets: Asset[];
   defaultValue?: string | null;
   placeholder?: string;
 }) {
@@ -28,7 +28,6 @@ export default function CoverPicker({
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string>(defaultValue ?? "");
 
-  // ✅ defaultValue sonradan değişirse state'i güncelle (pickCover ile dönüşlerde şart)
   useEffect(() => {
     setSelectedId(defaultValue ?? "");
   }, [defaultValue]);
@@ -44,16 +43,6 @@ export default function CoverPicker({
     return assets.filter((a) => a.path.toLowerCase().includes(t));
   }, [assets, q]);
 
-  function pick(id: string) {
-    setSelectedId(id);
-    setOpen(false);
-  }
-
-  function clear() {
-    setSelectedId("");
-    setOpen(false);
-  }
-
   const btn: React.CSSProperties = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -63,27 +52,46 @@ export default function CoverPicker({
     fontWeight: 800,
   };
 
+  function pick(e: React.MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedId(id);
+    setOpen(false);
+  }
+
+  function close(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setOpen(false);
+  }
+
+  function clear(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setSelectedId("");
+    setOpen(false);
+  }
+
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {/* hidden input: form submit buradan gidecek */}
       <input type="hidden" name={name} value={selectedId} />
 
-      {/* Kapalı görünüm */}
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={() => setOpen((s) => !s)}
-          style={btn}
-        >
+        <button type="button" onClick={() => setOpen((s) => !s)} style={btn}>
           {selected ? "Kapak değiştir" : "Kapak seç"}
         </button>
 
         <div style={{ fontSize: 12, opacity: 0.75 }}>
           {selected ? selected.path : placeholder ?? "Kapak ara (örn: covers/2025-12)"}
         </div>
+
+        {open ? (
+          <button type="button" onClick={close} style={btn}>
+            Kapat
+          </button>
+        ) : null}
       </div>
 
-      {/* Seçili önizleme (küçük) */}
       {selected?.publicUrl ? (
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -98,7 +106,6 @@ export default function CoverPicker({
               border: "1px solid #eee",
             }}
           />
-
           <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>
             <div style={{ fontWeight: 800, marginBottom: 2 }}>Seçili kapak</div>
             {selected.path}
@@ -114,7 +121,6 @@ export default function CoverPicker({
         </div>
       ) : null}
 
-      {/* Açılır panel */}
       {open ? (
         <div
           style={{
@@ -124,24 +130,18 @@ export default function CoverPicker({
             background: "#fff",
           }}
         >
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={placeholder ?? "Kapak ara (örn: covers/2025-12)"}
-              style={{
-                flex: 1,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                fontWeight: 600,
-              }}
-            />
-
-            <button type="button" onClick={() => setOpen(false)} style={btn}>
-              Kapat
-            </button>
-          </div>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={placeholder ?? "Kapak ara (örn: covers/2025-12)"}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              fontWeight: 600,
+            }}
+          />
 
           <div
             style={{
@@ -154,10 +154,9 @@ export default function CoverPicker({
               paddingRight: 4,
             }}
           >
-            {/* Kapak yok kutusu */}
             <button
               type="button"
-              onClick={() => pick("")}
+              onClick={(e) => pick(e, "")}
               style={{
                 border: selectedId === "" ? "2px solid #111" : "1px solid #eee",
                 borderRadius: 12,
@@ -189,7 +188,7 @@ export default function CoverPicker({
               <button
                 key={a.id}
                 type="button"
-                onClick={() => pick(a.id)}
+                onClick={(e) => pick(e, a.id)}
                 style={{
                   border: a.id === selectedId ? "2px solid #111" : "1px solid #eee",
                   borderRadius: 12,
@@ -217,7 +216,7 @@ export default function CoverPicker({
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-            Not: Seçince otomatik kapanır. Thumbnail görünür.
+            Not: Seçince otomatik kapanır.
           </div>
         </div>
       ) : null}

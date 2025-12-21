@@ -1,23 +1,74 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
-import { listAssets, uploadAsset, deleteAsset } from "./actions";
+import { listAssets, uploadAsset } from "./actions";
+import DeleteAssetForm from "./DeleteAssetForm";
 
-export default async function AssetsPage() {
+export default async function AssetsPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   await requireAdmin();
 
   const assets = await listAssets();
 
+  const modeRaw = searchParams?.mode;
+  const mode = typeof modeRaw === "string" ? modeRaw : null;
+
+  const kindRaw = searchParams?.kind; // "cover" | "audio"
+  const kind = typeof kindRaw === "string" ? kindRaw : null;
+
+  const returnToRaw = searchParams?.return_to;
+  const return_to = typeof returnToRaw === "string" ? returnToRaw : null;
+
+  const isPickMode = mode === "pick" && !!kind && !!return_to;
+
   return (
     <div style={{ padding: 24, maxWidth: 980 }}>
-      <h1>Assets</h1>
-      <p>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h1 style={{ margin: 0 }}>Assets</h1>
+
+        {isPickMode ? (
+          <Link
+            href={return_to!}
+            style={{
+              textDecoration: "none",
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              fontWeight: 800,
+              color: "#111",
+              background: "#fff",
+            }}
+          >
+            ← Edit sayfasına geri
+          </Link>
+        ) : null}
+      </div>
+
+      <p style={{ marginTop: 12 }}>
         Buradan görsel / ses yükleyin. Yüklenen dosyalar Storage’daki <b>media</b>{" "}
         bucket’ına gider ve <b>assets</b> tablosuna kaydedilir.
+        {isPickMode ? (
+          <>
+            {" "}
+            <b>
+              (Seçim modu açık: {kind === "cover" ? "Kapak" : "Ses"} seçiyorsunuz)
+            </b>
+          </>
+        ) : null}
       </p>
 
       <form
         action={uploadAsset}
         encType="multipart/form-data"
-        style={{ marginTop: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}
+        style={{
+          marginTop: 16,
+          marginBottom: 24,
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+        }}
       >
         <input type="file" name="file" accept="image/*,audio/*" required />
         <button
@@ -45,6 +96,19 @@ export default async function AssetsPage() {
             const ct = String(a.content_type ?? "");
             const isImg = ct.startsWith("image/");
             const isAudio = ct.startsWith("audio/");
+
+            // Seçim modunda: cover ise sadece image; audio ise sadece audio gösterelim
+            if (isPickMode) {
+              if (kind === "cover" && !isImg) return null;
+              if (kind === "audio" && !isAudio) return null;
+            }
+
+            const pickHref =
+              isPickMode && return_to
+                ? `${return_to}?${kind === "cover" ? "pickCover" : "pickAudio"}=${encodeURIComponent(
+                    a.id
+                  )}`
+                : null;
 
             return (
               <div
@@ -80,9 +144,9 @@ export default async function AssetsPage() {
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     ) : isAudio ? (
-                      <span style={{ fontSize: 12, color: "#666" }}>AUDIO</span>
+                      <span style={{ fontSize: 12, color: "#666", fontWeight: 800 }}>AUDIO</span>
                     ) : (
-                      <span style={{ fontSize: 12, color: "#666" }}>FILE</span>
+                      <span style={{ fontSize: 12, color: "#666", fontWeight: 800 }}>FILE</span>
                     )
                   ) : (
                     <span style={{ color: "#999", fontSize: 12 }}>no preview</span>
@@ -123,25 +187,26 @@ export default async function AssetsPage() {
                     />
                   ) : null}
 
-                  <form action={deleteAsset} style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <input type="hidden" name="id" value={a.id} />
-                    <input type="hidden" name="bucket" value={a.bucket} />
-                    <input type="hidden" name="path" value={a.path} />
-                    <button
-                      type="submit"
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        border: "1px solid rgba(220,20,60,0.35)",
-                        background: "rgba(220,20,60,0.08)",
-                        color: "crimson",
-                        cursor: "pointer",
-                        fontWeight: 800,
-                      }}
-                    >
-                      Sil
-                    </button>
-                  </form>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    {pickHref ? (
+                      <Link
+                        href={pickHref}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #111",
+                          background: "#111",
+                          color: "#fff",
+                          textDecoration: "none",
+                          fontWeight: 900,
+                        }}
+                      >
+                        Seç
+                      </Link>
+                    ) : null}
+
+                    <DeleteAssetForm id={a.id} bucket={a.bucket} path={a.path} />
+                  </div>
                 </div>
               </div>
             );
