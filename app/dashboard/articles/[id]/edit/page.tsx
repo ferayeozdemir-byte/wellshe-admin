@@ -35,32 +35,37 @@ type TrRow = {
   audio_asset_id: string | null;
 };
 
-export default async function EditArticlePage({
-  params,
-  searchParams,
-}: {
+type Props = {
   params: { id: string } | Promise<{ id: string }>;
   searchParams?:
     | { [key: string]: string | string[] | undefined }
     | Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
+};
+
+export default async function EditArticlePage(props: Props) {
   await requireAdmin();
   const supabase = await createClient();
 
-  // Next 16: params ve searchParams Promise olabiliyor → çöz
-  const resolvedParams = await Promise.resolve(params);
+  // --------- URL paramları / query paramları güvenli çöz ---------
+  const resolvedParams = await Promise.resolve(props.params);
   const id = resolvedParams.id;
 
-  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
-  const coverErrorRaw = resolvedSearchParams["coverError"];
-  const audioErrorRaw = resolvedSearchParams["audioError"];
-  const pickCoverRaw = resolvedSearchParams["pickCover"];
-  const pickAudioRaw = resolvedSearchParams["pickAudio"];
+  const resolvedSearchParams = await Promise.resolve(props.searchParams ?? {});
 
-  const coverError =
-    typeof coverErrorRaw === "string" ? decodeURIComponent(coverErrorRaw) : null;
-  const audioError =
-    typeof audioErrorRaw === "string" ? decodeURIComponent(audioErrorRaw) : null;
+  const getQueryParam = (key: string): string | null => {
+    const raw = resolvedSearchParams[key];
+    if (typeof raw === "string") return raw;
+    if (Array.isArray(raw)) return raw[0] ?? null;
+    return null;
+  };
+
+  const coverErrorRaw = getQueryParam("coverError");
+  const audioErrorRaw = getQueryParam("audioError");
+  const pickCoverRaw = getQueryParam("pickCover");
+  const pickAudioRaw = getQueryParam("pickAudio");
+
+  const coverError = coverErrorRaw ? decodeURIComponent(coverErrorRaw) : null;
+  const audioError = audioErrorRaw ? decodeURIComponent(audioErrorRaw) : null;
 
   // Makale
   const { data: article, error: aErr } = await supabase
@@ -110,7 +115,8 @@ export default async function EditArticlePage({
       path: a.path,
       content_type: a.content_type ?? null,
       bytes: a.bytes ?? null,
-      publicUrl: supabase.storage.from(a.bucket).getPublicUrl(a.path).data.publicUrl,
+      publicUrl:
+        supabase.storage.from(a.bucket).getPublicUrl(a.path).data.publicUrl,
     }));
 
   const trData = {
@@ -248,8 +254,8 @@ export default async function EditArticlePage({
         )}
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu makaleye
-          “cover” olarak bağlar.
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
+          makaleye “cover” olarak bağlar.
         </div>
       </div>
 
@@ -323,7 +329,11 @@ export default async function EditArticlePage({
 
         <label style={label}>
           <div>Kategori</div>
-          <select name="category_id" defaultValue={article.category_id ?? ""} style={input}>
+          <select
+            name="category_id"
+            defaultValue={article.category_id ?? ""}
+            style={input}
+          >
             <option value="">- Seçiniz -</option>
             {(categories ?? []).map((c: CategoryRow) => (
               <option key={c.id} value={c.id}>
@@ -342,8 +352,6 @@ export default async function EditArticlePage({
                 {a.path}
                 {typeof a.bytes === "number"
                   ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
-
-
                   : ""}
               </option>
             ))}

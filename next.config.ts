@@ -5,7 +5,15 @@ const nextConfig: NextConfig = {
 
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      // Server Actions ile gelen upload’lar için limit
+      bodySizeLimit: "20mb",
+    },
+  },
+
+  // Eski tip API route’lar vs. için de güvenli olsun
+  api: {
+    bodyParser: {
+      sizeLimit: "20mb",
     },
   },
 };
