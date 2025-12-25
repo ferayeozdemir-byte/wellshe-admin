@@ -187,7 +187,7 @@ export async function saveAndPreviewTR(formData: FormData) {
   redirect(`/dashboard/articles/${id}/preview`);
 }
 
-/* ---------- COVER UPLOAD ---------- */
+/* ---------- cover upload ---------- */
 
 export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   await requireAdmin();
@@ -268,7 +268,7 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   }
 }
 
-/* ---------- AUDIO UPLOAD (TRY/CATCH) ---------- */
+/* ---------- audio upload ---------- */
 
 export async function uploadAudioForArticle(
   formData: FormData
@@ -276,42 +276,19 @@ export async function uploadAudioForArticle(
   await requireAdmin();
 
   const article_id = String(formData.get("article_id") || "").trim();
-
-  if (!article_id) {
-    const msg = "article_id eksik.";
-    redirect(
-      `/dashboard/articles?audioError=${encodeURIComponent(msg)}`
-    );
-  }
+  if (!article_id) throw new Error("article_id eksik");
 
   try {
     const admin = getAdminSupabase();
 
     const file = formData.get("file") as File | null;
     if (!file) {
-      throw new Error("Dosya seçilmedi.");
+      throw new Error("Ses dosyası seçilmedi.");
     }
 
     const maxBytes = 20 * 1024 * 1024; // 20MB
     if (file.size > maxBytes) {
-      throw new Error(
-        "Ses dosyası 20 MB'tan büyük. Lütfen dosyayı küçültüp tekrar deneyin."
-      );
-    }
-
-    // Önce TR translation var mı?
-    const { data: trRow, error: trReadErr } = await admin
-      .from("article_translations")
-      .select("article_id")
-      .eq("article_id", article_id)
-      .eq("lang", "tr")
-      .maybeSingle();
-
-    if (trReadErr) throw new Error(trReadErr.message);
-    if (!trRow) {
-      throw new Error(
-        "Bu makalenin TR kaydı yok. Önce Edit sayfasında 'Save' yapın, sonra ses yükleyin."
-      );
+      throw new Error("Ses dosyası 20 MB'tan büyük. Lütfen küçültün.");
     }
 
     const ext = extFromFilename(file.name) || "";
@@ -395,9 +372,8 @@ export async function uploadAudioForArticle(
     redirect(`/dashboard/articles/${article_id}/edit`);
   } catch (e: any) {
     const msg = String(
-      e?.message ?? "Ses dosyası upload sırasında bir hata oluştu."
+      e?.message ?? "Ses upload sırasında bir hata oluştu."
     );
-
     redirect(
       `/dashboard/articles/${article_id}/edit?audioError=${encodeURIComponent(
         msg
