@@ -266,103 +266,147 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   }
 }
 
+/* ---------- AUDIO UPLOAD (TRY/CATCH İLE) ---------- */
+
 export async function uploadAudioForArticle(
   formData: FormData
 ): Promise<void> {
   await requireAdmin();
 
-  const admin = getAdminSupabase();
-
   const article_id = String(formData.get("article_id") || "").trim();
-  if (!article_id) throw new Error("article_id eksik");
 
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    throw new Error("Dosya seçilmedi.");
-  }
-
-  const maxBytes = 20 * 1024 * 1024; // 20MB
-  if (file.size > maxBytes) {
-    throw new Error("Ses dosyası 20 MB'tan büyük. Lütfen küçültün.");
-  }
-
-  const ext = extFromFilename(file.name) || "";
-  const rawType = (file.type || "").toLowerCase();
-
-  let contentType = rawType;
-
-  const isAudioByType = rawType.startsWith("audio/");
-  const isMpegByType =
-    rawType === "video/mpeg" || rawType === "audio/mpeg";
-  const isOctet =
-    rawType === "" || rawType === "application/octet-stream";
-
-  const isMp3Ext = ext === ".mp3";
-  const isMpegExt =
-    ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
-
-  if (isAudioByType) {
-    contentType = rawType;
-  } else if (isMpegByType || isOctet) {
-    if (isMp3Ext || isMpegExt) {
-      contentType = "audio/mpeg";
-    }
-  }
-
-  if (!contentType.startsWith("audio/")) {
-    throw new Error(
-      `Dosya audio olarak algılanamadı. (type: ${
-        rawType || "empty"
-      }, ext: ${ext || "none"})`
+  // ID yoksa direkt listeye döndür, yoksa zaten redirect never-return
+  if (!article_id) {
+    const msg = "article_id eksik.";
+    redirect(
+      `/dashboard/articles?audioError=${encodeURIComponent(msg)}`
     );
   }
 
-  const bucket = "media";
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  try {
+    const admin = getAdminSupabase();
 
-  const fileId =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      throw new Error("Dosya seçilmedi.");
+    }
 
-  const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
+    // 20 MB limit
+    const maxBytes = 20 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new Error(
+        "Ses dosyası 20 MB'tan büyük. Lütfen dosyayı küçültüp tekrar deneyin."
+      );
+    }
 
-  const { error: upErr } = await admin.storage
-    .from(bucket)
-    .upload(path, file, {
-      contentType,
-      upsert: false,
-    });
-  if (upErr) throw new Error(upErr.message);
+    // Önce TR translation var mı?
+    const { data: trRow, error: trReadErr } = await admin
+      .from("article_translations")
+      .select("article_id")
+      .eq("article_id", article_id)
+      .eq("lang", "tr")
+      .maybeSingle();
 
-  const { data: inserted, error: insErr } = await admin
-    .from("assets")
-    .insert({
-      bucket,
-      path,
-      content_type: contentType,
-      bytes: file.size,
-    })
-    .select("id")
-    .single();
+    if (trReadErr) throw new Error(trReadErr.message);
+    if (!trRow) {
+      throw new Error(
+        "Bu makalenin TR kaydı yok. Önce Edit sayfasında 'Save' yapın, sonra ses yükleyin."
+      );
+    }
 
-  if (insErr) throw new Error(insErr.message);
-  const assetId = inserted?.id;
-  if (!assetId) throw new Error("Asset ID alınamadı.");
+    // content-type & uzantı düzeltme
+    const ext = extFromFilename(file.name) || "";
+    const rawType = (file.type || "").toLowerCase();
 
-  const { error: updErr } = await admin
-    .from("article_translations")
-    .update({ audio_asset_id: assetId })
-    .eq("article_id", article_id)
-    .eq("lang", "tr");
+    let contentType = rawType;
 
-  if (updErr) throw new Error(updErr.message);
+    const isAudioByType = rawType.startsWith("audio/");
+    const isMpegByType =
+      rawType === "video/mpeg" || rawType === "audio/mpeg";
+    const isOctet =
+      rawType === "" || rawType === "application/octet-stream";
 
-  revalidatePath(`/dashboard/articles/${article_id}/edit`);
-  revalidatePath(`/dashboard/articles/${article_id}/preview`);
-  revalidatePath("/dashboard/articles");
+    const isMp3Ext = ext === ".mp3";
+    const isMpegExt =
+      ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
 
-  redirect(`/dashboard/articles/${article_id}/edit`);
+    if (isAudioByType) {
+      contentType = rawType;
+    } else if (isMpegByType || isOctet) {
+      if (isMp3Ext || isMpegExt) {
+        contentType = "audio/mpeg";
+      }
+    }
+
+    if (!contentType.startsWith("audio/")) {
+      throw new Error(
+        `Dosya audio olarak algılanamadı. (type: ${
+          rawType || "empty"
+        }, ext: ${ext || "none"})`
+      );
+    }
+
+    const bucket = "media";
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+
+    const fileId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
+
+    // 1) storage upload
+    const { error: upErr } = await admin.storage
+      .from(bucket)
+      .upload(path, file, {
+        contentType,
+        upsert: false,
+      });
+    if (upErr) throw new Error(upErr.message);
+
+    // 2) assets insert
+    const { data: inserted, error: insErr } = await admin
+      .from("assets")
+      .insert({
+        bucket,
+        path,
+        content_type: contentType,
+        bytes: file.size,
+      })
+      .select("id")
+      .single();
+
+    if (insErr) throw new Error(insErr.message);
+    const assetId = inserted?.id;
+    if (!assetId) throw new Error("Asset ID alınamadı.");
+
+    // 3) TR translation update
+    const { error: updErr } = await admin
+      .from("article_translations")
+      .update({ audio_asset_id: assetId })
+      .eq("article_id", article_id)
+      .eq("lang", "tr");
+
+    if (updErr) throw new Error(updErr.message);
+
+    // 4) revalidate + edit sayfasına dön
+    revalidatePath(`/dashboard/articles/${article_id}/edit`);
+    revalidatePath(`/dashboard/articles/${article_id}/preview`);
+    revalidatePath("/dashboard/articles");
+
+    redirect(`/dashboard/articles/${article_id}/edit`);
+  } catch (e: any) {
+    const msg = String(
+      e?.message ?? "Ses dosyası upload sırasında bir hata oluştu."
+    );
+
+    redirect(
+      `/dashboard/articles/${article_id}/edit?audioError=${encodeURIComponent(
+        msg
+      )}`
+    );
+  }
 }
