@@ -266,19 +266,131 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
 /* ✅ NEW: Audio upload + otomatik TR bağlama */
 export async function uploadAudioForArticle(formData: FormData): Promise<void> {
   await requireAdmin();
-  const admin = getAdminSupabase();
 
   const article_id = String(formData.get("article_id") || "").trim();
   if (!article_id) throw new Error("article_id eksik");
 
-  const file = formData.get("file") as File | null;
-  if (!file) throw new Error("Dosya seçilmedi.");
+  try {
+    const admin = getAdminSupabase();
 
-  // Audio dosyaları 2MB üstü olabilir → makul limit
-  const maxBytes = 20 * 1024 * 1024; // 20MB
-  if (file.size > maxBytes) {
-    throw new Error("Ses dosyası 20 MB’tan büyük. Lütfen dosyayı küçültün.");
+    const file = formData.get("file") as File | null;
+    if (!file) throw new Error("Dosya seçilmedi.");
+
+    // Audio dosyaları 2MB üstü olabilir → makul limit
+    const maxBytes = 20 * 1024 * 1024; // 20MB
+    if (file.size > maxBytes) {
+      throw new Error("Ses dosyası 20 MB’tan büyük. Lütfen dosyayı küçültün.");
+    }
+
+    // ✅ Önce TR translation var mı kontrol et
+    const { data: trRow, error: trReadErr } = await admin
+      .from("article_translations")
+      .select("article_id")
+      .eq("article_id", article_id)
+      .eq("lang", "tr")
+      .maybeSingle();
+
+    if (trReadErr) throw new Error(trReadErr.message);
+    if (!trRow) {
+      throw new Error(
+        "Bu makalenin TR çevirisi yok. Önce makaleyi Edit sayfasında 'Save' ile kaydedin, sonra ses yükleyin."
+      );
+    }
+
+    const ext = extFromFilename(file.name) || "";
+    const rawType = (file.type || "").toLowerCase();
+
+    // ✅ .mpeg vb. tipleri normalize et
+    let finalContentType = rawType;
+
+    const isAudioByType = rawType.startsWith("audio/");
+    const isMpegByType = rawType === "video/mpeg" || rawType === "audio/mpeg";
+    const isOctet = rawType === "" || rawType === "application/octet-stream";
+
+    const isMp3Ext = ext === ".mp3";
+    const isMpegExt = ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
+
+    if (isAudioByType) {
+      finalContentType = rawType;
+    } else if (isMpegByType || isOctet) {
+      if (isMp3Ext || isMpegExt) {
+        finalContentType = "audio/mpeg";
+      }
+    }
+
+    if (!finalContentType.startsWith("audio/")) {
+      throw new Error(
+        `Bu dosya audio olarak algılanamadı. (type: ${
+          rawType || "boş"
+        }, ext: ${ext || "yok"})`
+      );
+    }
+
+    const bucket = "media";
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+
+    const fileId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
+
+    // 1) storage upload
+    const { error: upErr } = await admin
+      .storage
+      .from(bucket)
+      .upload(path, file, {
+        contentType: finalContentType,
+        upsert: false,
+      });
+    if (upErr) throw new Error(upErr.message);
+
+    // 2) assets insert
+    const { data: inserted, error: insErr } = await admin
+      .from("assets")
+      .insert({
+        bucket,
+        path,
+        content_type: finalContentType,
+        bytes: file.size,
+      })
+      .select("id")
+      .single();
+
+    if (insErr) throw new Error(insErr.message);
+    if (!inserted?.id) throw new Error("Asset ID alınamadı.");
+
+    // 3) SADECE update: upsert yok
+    const { error: updErr } = await admin
+      .from("article_translations")
+      .update({ audio_asset_id: inserted.id })
+      .eq("article_id", article_id)
+      .eq("lang", "tr");
+
+    if (updErr) throw new Error(updErr.message);
+
+    revalidatePath(`/dashboard/articles/${article_id}/edit`);
+    revalidatePath(`/dashboard/articles/${article_id}/preview`);
+    revalidatePath("/dashboard/articles");
+
+    redirect(`/dashboard/articles/${article_id}/edit`);
+  } catch (e: any) {
+    const msg = String(
+      e?.message ?? "Ses upload sırasında beklenmeyen bir hata oluştu."
+    );
+
+    // ❗ Artık hata olursa panel çökmesin, sadece ekranda mesaj görelim
+    redirect(
+      `/dashboard/articles/${article_id}/edit?audioError=${encodeURIComponent(
+        msg
+      )}`
+    );
   }
+}
 
   // ✅ Önce TR translation var mı kontrol et
   // Yoksa audio update edemeyiz (upsert title null hatası veriyor)
