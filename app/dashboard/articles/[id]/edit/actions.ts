@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
-/* ----------------- helpers ----------------- */
+/* ---------- helpers ---------- */
 
 function slugifyTR(input: string) {
   const s = (input ?? "").trim().toLowerCase();
@@ -59,7 +59,6 @@ function getAdminSupabase() {
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 
-  // sizde env isimleri farklı olabildiği için birkaç olasılığı kabul ediyoruz
   const serviceKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_ROLE ||
@@ -82,7 +81,7 @@ function extFromFilename(name: string) {
   return ext;
 }
 
-/* ----------------- actions ----------------- */
+/* ---------- main actions ---------- */
 
 export async function updateArticleTRNoRedirect(formData: FormData) {
   await requireAdmin();
@@ -162,7 +161,7 @@ export async function updateArticleTRNoRedirect(formData: FormData) {
       slug,
       seo_title,
       seo_description,
-      audio_asset_id, // ✅ yeni alan
+      audio_asset_id,
     },
     { onConflict: "article_id,lang" }
   );
@@ -197,12 +196,14 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   try {
     const admin = getAdminSupabase();
 
-    const file = formData.get("file") as File | null;
-    if (!file) throw new Error("Dosya seçilmedi.");
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      throw new Error("Dosya seçilmedi.");
+    }
 
     const maxBytes = 2 * 1024 * 1024; // 2MB
     if (file.size > maxBytes) {
-      throw new Error("Kapak görseli 2 MB’tan büyük. Lütfen görseli sıkıştırın.");
+      throw new Error("Kapak görseli 2 MB'tan büyük. Lütfen görseli küçültün.");
     }
 
     const bucket = "media";
@@ -254,7 +255,9 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
 
     redirect(`/dashboard/articles/${article_id}/edit`);
   } catch (e: any) {
-    const msg = String(e?.message ?? "Kapak upload sırasında hata oluştu.");
+    const msg = String(
+      e?.message ?? "Kapak upload sırasında bir hata oluştu."
+    );
     redirect(
       `/dashboard/articles/${article_id}/edit?coverError=${encodeURIComponent(
         msg
@@ -263,180 +266,58 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   }
 }
 
-/* ✅ NEW: Audio upload + otomatik TR bağlama */
-export async function uploadAudioForArticle(formData: FormData): Promise<void> {
+export async function uploadAudioForArticle(
+  formData: FormData
+): Promise<void> {
   await requireAdmin();
+
+  const admin = getAdminSupabase();
 
   const article_id = String(formData.get("article_id") || "").trim();
   if (!article_id) throw new Error("article_id eksik");
 
-  try {
-    const admin = getAdminSupabase();
-
-    const file = formData.get("file") as File | null;
-    if (!file) throw new Error("Dosya seçilmedi.");
-
-    // Audio dosyaları 2MB üstü olabilir → makul limit
-    const maxBytes = 20 * 1024 * 1024; // 20MB
-    if (file.size > maxBytes) {
-      throw new Error("Ses dosyası 20 MB’tan büyük. Lütfen dosyayı küçültün.");
-    }
-
-    // ✅ Önce TR translation var mı kontrol et
-    const { data: trRow, error: trReadErr } = await admin
-      .from("article_translations")
-      .select("article_id")
-      .eq("article_id", article_id)
-      .eq("lang", "tr")
-      .maybeSingle();
-
-    if (trReadErr) throw new Error(trReadErr.message);
-    if (!trRow) {
-      throw new Error(
-        "Bu makalenin TR çevirisi yok. Önce makaleyi Edit sayfasında 'Save' ile kaydedin, sonra ses yükleyin."
-      );
-    }
-
-    const ext = extFromFilename(file.name) || "";
-    const rawType = (file.type || "").toLowerCase();
-
-    // ✅ .mpeg vb. tipleri normalize et
-    let finalContentType = rawType;
-
-    const isAudioByType = rawType.startsWith("audio/");
-    const isMpegByType = rawType === "video/mpeg" || rawType === "audio/mpeg";
-    const isOctet = rawType === "" || rawType === "application/octet-stream";
-
-    const isMp3Ext = ext === ".mp3";
-    const isMpegExt = ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
-
-    if (isAudioByType) {
-      finalContentType = rawType;
-    } else if (isMpegByType || isOctet) {
-      if (isMp3Ext || isMpegExt) {
-        finalContentType = "audio/mpeg";
-      }
-    }
-
-    if (!finalContentType.startsWith("audio/")) {
-      throw new Error(
-        `Bu dosya audio olarak algılanamadı. (type: ${
-          rawType || "boş"
-        }, ext: ${ext || "yok"})`
-      );
-    }
-
-    const bucket = "media";
-
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-
-    const fileId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-    const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
-
-    // 1) storage upload
-    const { error: upErr } = await admin
-      .storage
-      .from(bucket)
-      .upload(path, file, {
-        contentType: finalContentType,
-        upsert: false,
-      });
-    if (upErr) throw new Error(upErr.message);
-
-    // 2) assets insert
-    const { data: inserted, error: insErr } = await admin
-      .from("assets")
-      .insert({
-        bucket,
-        path,
-        content_type: finalContentType,
-        bytes: file.size,
-      })
-      .select("id")
-      .single();
-
-    if (insErr) throw new Error(insErr.message);
-    if (!inserted?.id) throw new Error("Asset ID alınamadı.");
-
-    // 3) SADECE update: upsert yok
-    const { error: updErr } = await admin
-      .from("article_translations")
-      .update({ audio_asset_id: inserted.id })
-      .eq("article_id", article_id)
-      .eq("lang", "tr");
-
-    if (updErr) throw new Error(updErr.message);
-
-    revalidatePath(`/dashboard/articles/${article_id}/edit`);
-    revalidatePath(`/dashboard/articles/${article_id}/preview`);
-    revalidatePath("/dashboard/articles");
-
-    redirect(`/dashboard/articles/${article_id}/edit`);
-  } catch (e: any) {
-    const msg = String(
-      e?.message ?? "Ses upload sırasında beklenmeyen bir hata oluştu."
-    );
-
-    // ❗ Artık hata olursa panel çökmesin, sadece ekranda mesaj görelim
-    redirect(
-      `/dashboard/articles/${article_id}/edit?audioError=${encodeURIComponent(
-        msg
-      )}`
-    );
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    throw new Error("Dosya seçilmedi.");
   }
-}
 
-  // ✅ Önce TR translation var mı kontrol et
-  // Yoksa audio update edemeyiz (upsert title null hatası veriyor)
-  const { data: trRow, error: trReadErr } = await admin
-    .from("article_translations")
-    .select("article_id")
-    .eq("article_id", article_id)
-    .eq("lang", "tr")
-    .maybeSingle();
-
-  if (trReadErr) throw new Error(trReadErr.message);
-  if (!trRow) {
-    throw new Error(
-      "Bu makalenin TR çevirisi yok. Önce makaleyi Edit sayfasında 'Save' ile kaydedin, sonra ses yükleyin."
-    );
+  const maxBytes = 20 * 1024 * 1024; // 20MB
+  if (file.size > maxBytes) {
+    throw new Error("Ses dosyası 20 MB'tan büyük. Lütfen küçültün.");
   }
 
   const ext = extFromFilename(file.name) || "";
   const rawType = (file.type || "").toLowerCase();
 
-  // ✅ .mpeg bazen video/mpeg veya octet-stream gelebiliyor → audio/mpeg’e zorla
-  let finalContentType = rawType;
+  let contentType = rawType;
 
   const isAudioByType = rawType.startsWith("audio/");
-  const isMpegByType = rawType === "video/mpeg" || rawType === "audio/mpeg";
-  const isOctet = rawType === "" || rawType === "application/octet-stream";
+  const isMpegByType =
+    rawType === "video/mpeg" || rawType === "audio/mpeg";
+  const isOctet =
+    rawType === "" || rawType === "application/octet-stream";
 
   const isMp3Ext = ext === ".mp3";
-  const isMpegExt = ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
+  const isMpegExt =
+    ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
 
   if (isAudioByType) {
-    finalContentType = rawType;
+    contentType = rawType;
   } else if (isMpegByType || isOctet) {
     if (isMp3Ext || isMpegExt) {
-      finalContentType = "audio/mpeg";
+      contentType = "audio/mpeg";
     }
   }
 
-  if (!finalContentType.startsWith("audio/")) {
+  if (!contentType.startsWith("audio/")) {
     throw new Error(
-      `Bu dosya audio olarak algılanamadı. (type: ${rawType || "boş"}, ext: ${ext || "yok"})`
+      `Dosya audio olarak algılanamadı. (type: ${
+        rawType || "empty"
+      }, ext: ${ext || "none"})`
     );
   }
 
   const bucket = "media";
-
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -448,32 +329,32 @@ export async function uploadAudioForArticle(formData: FormData): Promise<void> {
 
   const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
 
-  // 1) storage upload
-  const { error: upErr } = await admin.storage.from(bucket).upload(path, file, {
-    contentType: finalContentType,
-    upsert: false,
-  });
+  const { error: upErr } = await admin.storage
+    .from(bucket)
+    .upload(path, file, {
+      contentType,
+      upsert: false,
+    });
   if (upErr) throw new Error(upErr.message);
 
-  // 2) assets insert
   const { data: inserted, error: insErr } = await admin
     .from("assets")
     .insert({
       bucket,
       path,
-      content_type: finalContentType,
+      content_type: contentType,
       bytes: file.size,
     })
     .select("id")
     .single();
 
   if (insErr) throw new Error(insErr.message);
-  if (!inserted?.id) throw new Error("Asset ID alınamadı.");
+  const assetId = inserted?.id;
+  if (!assetId) throw new Error("Asset ID alınamadı.");
 
-  // ✅ 3) SADECE update: upsert yok!
   const { error: updErr } = await admin
     .from("article_translations")
-    .update({ audio_asset_id: inserted.id })
+    .update({ audio_asset_id: assetId })
     .eq("article_id", article_id)
     .eq("lang", "tr");
 
