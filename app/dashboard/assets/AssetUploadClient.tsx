@@ -2,12 +2,14 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient"; // sende daha önce böyleydi
+import { supabase } from "@/lib/supabaseClient";
 
-export default function AssetUploadClient() {
+type UploadError = string | null;
+
+function AssetUploadClient() {
   const router = useRouter();
   const [isUploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UploadError>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -15,7 +17,7 @@ export default function AssetUploadClient() {
 
     const form = e.currentTarget;
     const fileInput = form.elements.namedItem("file") as HTMLInputElement | null;
-    const file = fileInput?.files?.[0];
+    const file = fileInput?.files?.[0] ?? null;
 
     if (!file) {
       setError("Lütfen bir dosya seçin.");
@@ -26,7 +28,7 @@ export default function AssetUploadClient() {
       setUploading(true);
 
       // 1) Supabase Storage'a direkt upload
-      const bucket = "media"; // sende hangi bucket ise onu kullan
+      const bucket = "media"; // media bucket'ını kullanıyoruz
       const filePath = `uploads/${Date.now()}-${file.name}`;
 
       const { error: uploadError } = await supabase.storage
@@ -40,7 +42,7 @@ export default function AssetUploadClient() {
         throw uploadError;
       }
 
-      // 2) DB'ye assets kaydı eklemek için API route'a küçük bir istek
+      // 2) DB'de assets kaydı oluştur
       const res = await fetch("/api/admin/assets/register", {
         method: "POST",
         headers: {
@@ -59,12 +61,12 @@ export default function AssetUploadClient() {
         throw new Error(`DB kayıt hatası: ${text}`);
       }
 
-      // Başarılı → sayfayı yenile
+      // Başarılı → formu sıfırla + sayfayı yenile
       form.reset();
-      router.refresh(); // Next 13+ için
+      router.refresh();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Beklenmeyen bir hata oluştu.");
+      setError(err?.message ?? "Beklenmeyen bir hata oluştu.");
     } finally {
       setUploading(false);
     }
@@ -107,3 +109,5 @@ export default function AssetUploadClient() {
     </form>
   );
 }
+
+export default AssetUploadClient;
