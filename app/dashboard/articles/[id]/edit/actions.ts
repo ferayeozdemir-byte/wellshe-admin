@@ -187,6 +187,8 @@ export async function saveAndPreviewTR(formData: FormData) {
   redirect(`/dashboard/articles/${id}/preview`);
 }
 
+/* ---------- COVER UPLOAD ---------- */
+
 export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   await requireAdmin();
 
@@ -196,8 +198,8 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   try {
     const admin = getAdminSupabase();
 
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
+    const file = formData.get("file") as File | null;
+    if (!file) {
       throw new Error("Dosya seçilmedi.");
     }
 
@@ -266,7 +268,7 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   }
 }
 
-/* ---------- AUDIO UPLOAD (TRY/CATCH İLE) ---------- */
+/* ---------- AUDIO UPLOAD (TRY/CATCH) ---------- */
 
 export async function uploadAudioForArticle(
   formData: FormData
@@ -275,7 +277,6 @@ export async function uploadAudioForArticle(
 
   const article_id = String(formData.get("article_id") || "").trim();
 
-  // ID yoksa direkt listeye döndür, yoksa zaten redirect never-return
   if (!article_id) {
     const msg = "article_id eksik.";
     redirect(
@@ -286,13 +287,12 @@ export async function uploadAudioForArticle(
   try {
     const admin = getAdminSupabase();
 
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
+    const file = formData.get("file") as File | null;
+    if (!file) {
       throw new Error("Dosya seçilmedi.");
     }
 
-    // 20 MB limit
-    const maxBytes = 20 * 1024 * 1024;
+    const maxBytes = 20 * 1024 * 1024; // 20MB
     if (file.size > maxBytes) {
       throw new Error(
         "Ses dosyası 20 MB'tan büyük. Lütfen dosyayı küçültüp tekrar deneyin."
@@ -314,7 +314,6 @@ export async function uploadAudioForArticle(
       );
     }
 
-    // content-type & uzantı düzeltme
     const ext = extFromFilename(file.name) || "";
     const rawType = (file.type || "").toLowerCase();
 
@@ -358,7 +357,6 @@ export async function uploadAudioForArticle(
 
     const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
 
-    // 1) storage upload
     const { error: upErr } = await admin.storage
       .from(bucket)
       .upload(path, file, {
@@ -367,7 +365,6 @@ export async function uploadAudioForArticle(
       });
     if (upErr) throw new Error(upErr.message);
 
-    // 2) assets insert
     const { data: inserted, error: insErr } = await admin
       .from("assets")
       .insert({
@@ -383,7 +380,6 @@ export async function uploadAudioForArticle(
     const assetId = inserted?.id;
     if (!assetId) throw new Error("Asset ID alınamadı.");
 
-    // 3) TR translation update
     const { error: updErr } = await admin
       .from("article_translations")
       .update({ audio_asset_id: assetId })
@@ -392,7 +388,6 @@ export async function uploadAudioForArticle(
 
     if (updErr) throw new Error(updErr.message);
 
-    // 4) revalidate + edit sayfasına dön
     revalidatePath(`/dashboard/articles/${article_id}/edit`);
     revalidatePath(`/dashboard/articles/${article_id}/preview`);
     revalidatePath("/dashboard/articles");
