@@ -9,13 +9,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "20mb",
     },
   },
-
-  // Eski tip API route’lar vs. için de güvenli olsun
-  api: {
-    bodyParser: {
-      sizeLimit: "20mb",
-    },
-  },
 };
 
 export default nextConfig;
