@@ -31,10 +31,10 @@ export default function ContentEditor({
   initialHTML,
   assets,
   maxBytes = 2 * 1024 * 1024, // 2MB
-  maxWidth = 2400, // ölçü uyarısı için eşik (istersen değiştir)
+  maxWidth = 2400,
   maxHeight = 2400,
 }: {
-  name: string; // form input name (content_html)
+  name: string;
   initialHTML: string;
   assets: AssetMiniRow[];
   maxBytes?: number;
@@ -78,12 +78,13 @@ export default function ContentEditor({
       }),
     ],
     content: initialHTML ?? "",
+    immediatelyRender: false, // ✅ Tiptap SSR uyarısını çözen kritik ayar
     onUpdate({ editor }) {
       setHtml(editor.getHTML());
     },
     editorProps: {
       attributes: {
-        class: "wellshe-editor", // CSS ile kontrol edeceğiz
+        class: "wellshe-editor",
       },
     },
   });
@@ -97,20 +98,23 @@ export default function ContentEditor({
       return;
     }
 
-    // 2MB uyarısı
     const isBig = bigIds.has(asset.id);
     if (isBig) {
-      const mb = typeof asset.bytes === "number" ? bytesToMB(asset.bytes).toFixed(2) : "?";
-      const ok = confirm(`Bu görsel büyük görünüyor (${mb} MB). Yine de eklemek istiyor musunuz?`);
+      const mb =
+        typeof asset.bytes === "number" ? bytesToMB(asset.bytes).toFixed(2) : "?";
+      const ok = confirm(
+        `Bu görsel büyük görünüyor (${mb} MB). Yine de eklemek istiyor musunuz?`
+      );
       if (!ok) return;
     }
 
-    // ölçü uyarısı
     const isHugeDim = hugeDimIds.has(asset.id);
     if (isHugeDim) {
       const w = asset.width ?? "?";
       const h = asset.height ?? "?";
-      const ok = confirm(`Bu görselin ölçüsü büyük (${w}×${h}). Yine de eklemek istiyor musunuz?`);
+      const ok = confirm(
+        `Bu görselin ölçüsü büyük (${w}×${h}). Yine de eklemek istiyor musunuz?`
+      );
       if (!ok) return;
     }
 
@@ -124,11 +128,19 @@ export default function ContentEditor({
     <div style={{ display: "grid", gap: 10 }}>
       {/* Toolbar */}
       <div style={toolbar}>
-        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} style={btn}>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          style={btn}
+        >
           Bold
         </button>
 
-        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} style={btn}>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          style={btn}
+        >
           Italic
         </button>
 
@@ -148,7 +160,11 @@ export default function ContentEditor({
           H3
         </button>
 
-        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} style={btn}>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          style={btn}
+        >
           • Liste
         </button>
 
@@ -185,7 +201,8 @@ export default function ContentEditor({
             </div>
 
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-              Not: Sadece <b>image/*</b> olanlar listelenir. 2MB+ veya yüksek çözünürlükte uyarı verir.
+              Not: Sadece <b>image/*</b> olanlar listelenir. 2MB+ veya yüksek
+              çözünürlükte uyarı verir.
             </div>
 
             <div style={assetGrid}>
@@ -202,20 +219,38 @@ export default function ContentEditor({
                     style={assetCard}
                     title={a.path}
                   >
-                    <div style={{ fontSize: 12, opacity: 0.8, wordBreak: "break-all" }}>{a.path}</div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.8,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {a.path}
+                    </div>
 
-                    <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        marginTop: 8,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
                       {isBig && (
                         <span style={badge}>
                           2MB+
-                          {typeof a.bytes === "number" ? ` (${bytesToMB(a.bytes).toFixed(2)} MB)` : ""}
+                          {typeof a.bytes === "number"
+                            ? ` (${bytesToMB(a.bytes).toFixed(2)} MB)`
+                            : ""}
                         </span>
                       )}
 
                       {isHuge && (
                         <span style={badgeDim}>
                           Büyük ölçü
-                          {(a.width && a.height) ? ` (${a.width}×${a.height})` : ""}
+                          {a.width && a.height ? ` (${a.width}×${a.height})` : ""}
                         </span>
                       )}
 
@@ -254,7 +289,7 @@ export default function ContentEditor({
           line-height: 24px;
           font-weight: 400;
           color: #111;
-          caret-color: #111; /* ✅ imleç görünür */
+          caret-color: #111;
         }
 
         .wellshe-editor.ProseMirror p {
@@ -288,7 +323,6 @@ export default function ContentEditor({
           margin: 0 0 8px 0;
         }
 
-        /* ✅ Editörde görseller küçük görünsün */
         .wellshe-editor.ProseMirror img {
           display: block;
           max-width: min(420px, 100%);

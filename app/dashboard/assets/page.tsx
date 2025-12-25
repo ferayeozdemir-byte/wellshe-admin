@@ -1,24 +1,30 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
-import { listAssets, uploadAsset } from "./actions";
+import { listAssets } from "./actions";
 import DeleteAssetForm from "./DeleteAssetForm";
+import AssetUploadClient from "./AssetUploadClient";
 
 export default async function AssetsPage({
   searchParams,
 }: {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?:
+    | { [key: string]: string | string[] | undefined }
+    | Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   await requireAdmin();
 
   const assets = await listAssets();
 
-  const modeRaw = searchParams?.mode;
+  // 🔑 Next 16: searchParams Promise olabiliyor → önce çöz
+  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
+
+  const modeRaw = resolvedSearchParams.mode;
   const mode = typeof modeRaw === "string" ? modeRaw : null;
 
-  const kindRaw = searchParams?.kind; // "cover" | "audio"
-  const kind = typeof kindRaw === "string" ? kindRaw : null;
+  const kindRaw = resolvedSearchParams.kind; // "cover" | "audio"
+  const kind = typeof kindRaw === "string" ? (kindRaw as "cover" | "audio") : null;
 
-  const returnToRaw = searchParams?.return_to;
+  const returnToRaw = resolvedSearchParams.return_to;
   const return_to = typeof returnToRaw === "string" ? returnToRaw : null;
 
   const isPickMode = mode === "pick" && !!kind && !!return_to;
@@ -59,32 +65,8 @@ export default async function AssetsPage({
         ) : null}
       </p>
 
-      <form
-        action={uploadAsset}
-        encType="multipart/form-data"
-        style={{
-          marginTop: 16,
-          marginBottom: 24,
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        <input type="file" name="file" accept="image/*,audio/*" required />
-        <button
-          type="submit"
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            cursor: "pointer",
-            fontWeight: 700,
-            background: "#fff",
-          }}
-        >
-          Upload
-        </button>
-      </form>
+      {/* 📦 Upload işlemini artık client-side bileşen yapıyor */}
+      <AssetUploadClient />
 
       <h2 style={{ marginTop: 24 }}>Son yüklenenler</h2>
 
@@ -105,9 +87,9 @@ export default async function AssetsPage({
 
             const pickHref =
               isPickMode && return_to
-                ? `${return_to}?${kind === "cover" ? "pickCover" : "pickAudio"}=${encodeURIComponent(
-                    a.id
-                  )}`
+                ? `${return_to}?${
+                    kind === "cover" ? "pickCover" : "pickAudio"
+                  }=${encodeURIComponent(a.id)}`
                 : null;
 
             return (
@@ -144,9 +126,13 @@ export default async function AssetsPage({
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     ) : isAudio ? (
-                      <span style={{ fontSize: 12, color: "#666", fontWeight: 800 }}>AUDIO</span>
+                      <span style={{ fontSize: 12, color: "#666", fontWeight: 800 }}>
+                        AUDIO
+                      </span>
                     ) : (
-                      <span style={{ fontSize: 12, color: "#666", fontWeight: 800 }}>FILE</span>
+                      <span style={{ fontSize: 12, color: "#666", fontWeight: 800 }}>
+                        FILE
+                      </span>
                     )
                   ) : (
                     <span style={{ color: "#999", fontSize: 12 }}>no preview</span>
