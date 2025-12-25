@@ -2,9 +2,22 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 
 type UploadError = string | null;
+
+// 🔑 Client-side Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  // Build-time'da hata görünsün diye:
+  console.warn(
+    "NEXT_PUBLIC_SUPABASE_URL veya NEXT_PUBLIC_SUPABASE_ANON_KEY tanımlı değil!"
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 function AssetUploadClient() {
   const router = useRouter();
