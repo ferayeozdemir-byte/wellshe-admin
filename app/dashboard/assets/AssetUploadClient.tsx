@@ -7,17 +7,69 @@ import { createClient } from "@supabase/supabase-js";
 type UploadError = string | null;
 
 // 🔑 Client-side Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  // Build-time'da hata görünsün diye:
   console.warn(
     "NEXT_PUBLIC_SUPABASE_URL veya NEXT_PUBLIC_SUPABASE_ANON_KEY tanımlı değil!"
   );
 }
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
+
+// Türkçe karakterleri ve boşlukları temizleyip güvenli bir dosya adı üretelim
+function makeSafeFileName(original: string) {
+  // 1) Uzantıyı ayır
+  const lastDot = original.lastIndexOf(".");
+  let base = lastDot > 0 ? original.slice(0, lastDot) : original;
+  let ext = lastDot > 0 ? original.slice(lastDot) : "";
+
+  // 2) Unicode → ASCII (aksan vs. temizleme)
+  base = base
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, ""); // diakritik temizle
+
+  // 3) Türkçe karakterleri ve özel karakterleri sadeleştir
+  base = base
+    .replace(/ğ/g, "g")
+    .replace(/Ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/Ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/Ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/Ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "c");
+
+  // 4) Harf/rakam/./dışındaki her şeyi tire yap
+  base = base.replace(/[^a-zA-Z0-9\.]+/g, "-");
+
+  // 5) Birden fazla tırayı sadeleştir, baş/sondaki tireleri al
+  base = base.replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+
+  // 6) Küçük harfe çevir
+  base = base.toLowerCase();
+
+  // 7) Uzantıyı standartlaştır (mp3/jpg vs. küçük harf)
+  if (!ext) {
+    ext = "";
+  } else {
+    ext = ext.toLowerCase();
+  }
+
+  if (!base) {
+    base = "file";
+  }
+
+  return `${base}${ext}`;
+}
 
 function AssetUploadClient() {
   const router = useRouter();
@@ -37,13 +89,22 @@ function AssetUploadClient() {
       return;
     }
 
+    if (!supabase) {
+      setError(
+        "Supabase yapılandırması eksik. Lütfen NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY env değişkenlerini kontrol edin."
+      );
+      return;
+    }
+
     try {
       setUploading(true);
 
-      // 1) Supabase Storage'a direkt upload
+      // 🔐 Güvenli dosya adı üret
+      const safeName = makeSafeFileName(file.name);
       const bucket = "media"; // media bucket'ını kullanıyoruz
-      const filePath = `uploads/${Date.now()}-${file.name}`;
+      const filePath = `uploads/${Date.now()}-${safeName}`;
 
+      // 1) Supabase Storage'a direkt upload
       const { error: uploadError } = await supabase.storage
         .from(bucket)
         .upload(filePath, file, {
