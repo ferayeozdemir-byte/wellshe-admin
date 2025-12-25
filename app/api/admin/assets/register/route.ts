@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server"; // sende service role ile çalışan helper
+import { createClient } from "@supabase/supabase-js";
+
+// ✅ Bu endpoint sadece server’da çalışıyor, burada service_role kullanabiliriz
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Service key ile çalışan tam yetkili Supabase client
+const supabase = createClient(supabaseUrl, serviceRoleKey, {
+  auth: {
+    persistSession: false,
+  },
+});
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,8 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-
+    // 🔐 service_role ile çağırdığımız için RLS bu client için devre dışı
     const { error } = await supabase.from("assets").insert({
       bucket,
       path,
