@@ -4,7 +4,6 @@ import type { CSSProperties } from "react";
 
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
-
 import {
   updateArticleTR,
   uploadCoverForArticle,
@@ -40,52 +39,56 @@ export default async function EditArticlePage({
   params,
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
+  params: { id: string } | Promise<{ id: string }>;
+  searchParams?:
+    | { [key: string]: string | string[] | undefined }
+    | Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   await requireAdmin();
-
   const supabase = await createClient();
-  const id = params.id;
 
-  // ✅ Query string hata mesajları
-  const coverErrorRaw = searchParams?.coverError;
+  // Next 16: params ve searchParams Promise olabiliyor → çöz
+  const resolvedParams = await Promise.resolve(params);
+  const id = resolvedParams.id;
+
+  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
+  const coverErrorRaw = resolvedSearchParams["coverError"];
+  const audioErrorRaw = resolvedSearchParams["audioError"];
+  const pickCoverRaw = resolvedSearchParams["pickCover"];
+  const pickAudioRaw = resolvedSearchParams["pickAudio"];
+
   const coverError =
     typeof coverErrorRaw === "string" ? decodeURIComponent(coverErrorRaw) : null;
-
-  const audioErrorRaw = searchParams?.audioError;
   const audioError =
     typeof audioErrorRaw === "string" ? decodeURIComponent(audioErrorRaw) : null;
 
-  // ✅ Makale
+  // Makale
   const { data: article, error: aErr } = await supabase
     .from("articles")
     .select("id, status, created_at, category_id, cover_asset_id")
     .eq("id", id)
     .single();
 
-  if (aErr || !article) {
-    notFound();
-  }
+  if (aErr || !article) notFound();
 
-  // ✅ TR translation
+  // TR translation
   const { data: tr, error: tErr } = await supabase
     .from("article_translations")
     .select(
-      "title,summary,content_html,slug,seo_title,seo_description,audio_asset_id",
+      "title,summary,content_html,slug,seo_title,seo_description,audio_asset_id"
     )
     .eq("article_id", id)
     .eq("lang", "tr")
     .single<TrRow>();
 
-  // ✅ Kategoriler
+  // Kategoriler
   const { data: categories, error: cErr } = await supabase
     .from("categories")
     .select("id, title_tr")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
-  // ✅ Assets
+  // Assets
   const { data: assetsData, error: asErr } = await supabase
     .from("assets")
     .select("id,bucket,path,created_at,bytes,content_type,width,height")
@@ -94,9 +97,9 @@ export default async function EditArticlePage({
 
   const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
 
-  // ✅ Audio / Image listeleri
+  // Ses / görsel filtreleri
   const audioAssets = assets.filter((a) =>
-    String(a.content_type ?? "").startsWith("audio/"),
+    String(a.content_type ?? "").startsWith("audio/")
   );
 
   const imageAssetsForPicker = assets
@@ -107,9 +110,7 @@ export default async function EditArticlePage({
       path: a.path,
       content_type: a.content_type ?? null,
       bytes: a.bytes ?? null,
-      publicUrl: supabase.storage
-        .from(a.bucket)
-        .getPublicUrl(a.path).data.publicUrl,
+      publicUrl: supabase.storage.from(a.bucket).getPublicUrl(a.path).data.publicUrl,
     }));
 
   const trData = {
@@ -122,27 +123,24 @@ export default async function EditArticlePage({
     audio_asset_id: tr?.audio_asset_id ?? null,
   };
 
-  // ✅ Assets’ten geri dönüş parametreleri
-  const pickCoverRaw = searchParams?.pickCover;
+  // Assets sayfasından dönen id'ler
   const pickedCoverId = typeof pickCoverRaw === "string" ? pickCoverRaw : null;
-
-  const pickAudioRaw = searchParams?.pickAudio;
   const pickedAudioId = typeof pickAudioRaw === "string" ? pickAudioRaw : null;
 
   const coverDefaultValue = pickedCoverId ?? (article.cover_asset_id ?? "");
   const audioDefaultValue = pickedAudioId ?? (trData.audio_asset_id ?? "");
 
-  // ✅ Mevcut kapak / audio
+  // Mevcut kapak
   const currentCoverId = coverDefaultValue || null;
   const currentCover = assets.find((a) => a.id === currentCoverId);
 
   const coverPreviewUrl =
     currentCover?.bucket && currentCover?.path
-      ? supabase.storage
-          .from(currentCover.bucket)
-          .getPublicUrl(currentCover.path).data.publicUrl
+      ? supabase.storage.from(currentCover.bucket).getPublicUrl(currentCover.path)
+          .data.publicUrl
       : "";
 
+  // Mevcut audio
   const currentAudioId = audioDefaultValue || null;
   const currentAudio = assets.find((a) => a.id === currentAudioId);
 
@@ -150,7 +148,6 @@ export default async function EditArticlePage({
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Edit Article</h1>
 
@@ -163,7 +160,7 @@ export default async function EditArticlePage({
         </div>
       </div>
 
-      {/* Hata kutuları */}
+      {/* Hata mesajları */}
       {coverError ? (
         <div style={alertErrorBox}>Kapak upload hatası: {coverError}</div>
       ) : null}
@@ -173,24 +170,18 @@ export default async function EditArticlePage({
       ) : null}
 
       {tErr ? (
-        <p style={{ color: "crimson" }}>
-          TR translation okunamadı: {tErr.message}
-        </p>
+        <p style={{ color: "crimson" }}>TR translation okunamadı: {tErr.message}</p>
       ) : null}
 
       {cErr ? (
-        <p style={{ color: "crimson" }}>
-          Kategoriler okunamadı: {cErr.message}
-        </p>
+        <p style={{ color: "crimson" }}>Kategoriler okunamadı: {cErr.message}</p>
       ) : null}
 
       {asErr ? (
-        <p style={{ color: "crimson" }}>
-          Assets okunamadı: {asErr.message}
-        </p>
+        <p style={{ color: "crimson" }}>Assets okunamadı: {asErr.message}</p>
       ) : null}
 
-      {/* ✅ Kapak upload + otomatik bağlama */}
+      {/* Kapak upload */}
       <div
         style={{
           marginTop: 16,
@@ -205,7 +196,6 @@ export default async function EditArticlePage({
 
         <form
           action={uploadCoverForArticle}
-          encType="multipart/form-data"
           style={{
             display: "flex",
             gap: 10,
@@ -215,14 +205,13 @@ export default async function EditArticlePage({
         >
           <input type="hidden" name="article_id" value={article.id} />
           <input type="file" name="file" accept="image/*" required />
-
           <button type="submit" style={btnSecondary}>
             Kapak Upload + Otomatik Bağla
           </button>
 
           <Link
             href={`/dashboard/assets?mode=pick&kind=cover&return_to=${encodeURIComponent(
-              returnTo,
+              returnTo
             )}`}
             target="_blank"
             rel="noreferrer"
@@ -234,12 +223,9 @@ export default async function EditArticlePage({
 
         {coverPreviewUrl ? (
           <div style={{ marginTop: 4 }}>
-            <div
-              style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}
-            >
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
               Mevcut kapak önizleme:
             </div>
-
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={coverPreviewUrl}
@@ -251,10 +237,7 @@ export default async function EditArticlePage({
                 border: "1px solid #eee",
               }}
             />
-
-            <div
-              style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}
-            >
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
               {currentCover?.path ?? ""}
             </div>
           </div>
@@ -265,12 +248,12 @@ export default async function EditArticlePage({
         )}
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak
-          bu makaleye “cover” olarak bağlar.
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu makaleye
+          “cover” olarak bağlar.
         </div>
       </div>
 
-      {/* ✅ Audio upload + otomatik bağlama */}
+      {/* Audio upload */}
       <div
         style={{
           marginTop: 16,
@@ -285,7 +268,6 @@ export default async function EditArticlePage({
 
         <form
           action={uploadAudioForArticle}
-          encType="multipart/form-data"
           style={{
             display: "flex",
             gap: 10,
@@ -294,21 +276,14 @@ export default async function EditArticlePage({
           }}
         >
           <input type="hidden" name="article_id" value={article.id} />
-
-          <input
-            type="file"
-            name="file"
-            accept="audio/*,.mp3,.mpeg"
-            required
-          />
-
+          <input type="file" name="file" accept="audio/*,.mp3,.mpeg" required />
           <button type="submit" style={btnSecondary}>
             Ses Upload + Otomatik Bağla
           </button>
 
           <Link
             href={`/dashboard/assets?mode=pick&kind=audio&return_to=${encodeURIComponent(
-              returnTo,
+              returnTo
             )}`}
             target="_blank"
             rel="noreferrer"
@@ -333,20 +308,13 @@ export default async function EditArticlePage({
         )}
       </div>
 
-      {/* ✅ Ana kayıt formu */}
-      <form
-        action={updateArticleTR}
-        style={{ marginTop: 16, display: "grid", gap: 12 }}
-      >
+      {/* Ana kayıt formu */}
+      <form action={updateArticleTR} style={{ marginTop: 16, display: "grid", gap: 12 }}>
         <input type="hidden" name="id" value={article.id} />
 
         <label style={label}>
           <div>Status</div>
-          <select
-            name="status"
-            defaultValue={article.status}
-            style={input}
-          >
+          <select name="status" defaultValue={article.status} style={input}>
             <option value="draft">draft</option>
             <option value="published">published</option>
             <option value="scheduled">scheduled</option>
@@ -355,11 +323,7 @@ export default async function EditArticlePage({
 
         <label style={label}>
           <div>Kategori</div>
-          <select
-            name="category_id"
-            defaultValue={article.category_id ?? ""}
-            style={input}
-          >
+          <select name="category_id" defaultValue={article.category_id ?? ""} style={input}>
             <option value="">- Seçiniz -</option>
             {(categories ?? []).map((c: CategoryRow) => (
               <option key={c.id} value={c.id}>
@@ -369,53 +333,42 @@ export default async function EditArticlePage({
           </select>
         </label>
 
-        {/* Audio seçimi */}
         <label style={label}>
           <div>Ses Dosyası (Audio)</div>
-          <select
-            name="audio_asset_id"
-            defaultValue={audioDefaultValue}
-            style={input}
-          >
+          <select name="audio_asset_id" defaultValue={audioDefaultValue} style={input}>
             <option value="">- Ses ekleme -</option>
             {audioAssets.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.path}
                 {typeof a.bytes === "number"
                   ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
+
+
                   : ""}
               </option>
             ))}
           </select>
-
           <div style={{ fontSize: 12, opacity: 0.7 }}>
             Not: Her içerik için tek ses dosyası.
           </div>
         </label>
 
-        {/* Cover seçimi */}
         <div style={label}>
           <div>Cover (assets)</div>
-
           <CoverPicker
             name="cover_asset_id"
             assets={imageAssetsForPicker}
             defaultValue={coverDefaultValue}
             placeholder="Kapak ara (örn: covers/2025-12)"
           />
-
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Kapak artık önizlemeli seçilir.
+            Not: Kapak artık önizlemeli seçilir. (Select kaldırıldı.)
           </div>
         </div>
 
         <label style={label}>
           <div>Başlık (TR)</div>
-          <input
-            name="title"
-            defaultValue={trData.title}
-            style={input}
-          />
+          <input name="title" defaultValue={trData.title} style={input} />
         </label>
 
         <label style={label}>
@@ -446,29 +399,15 @@ export default async function EditArticlePage({
           />
         </label>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 12,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={label}>
             <div>Slug (TR)</div>
-            <input
-              name="slug"
-              defaultValue={trData.slug}
-              style={input}
-            />
+            <input name="slug" defaultValue={trData.slug} style={input} />
           </label>
 
           <label style={label}>
             <div>SEO Title</div>
-            <input
-              name="seo_title"
-              defaultValue={trData.seo_title}
-              style={input}
-            />
+            <input name="seo_title" defaultValue={trData.seo_title} style={input} />
           </label>
         </div>
 
