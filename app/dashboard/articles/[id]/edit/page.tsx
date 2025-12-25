@@ -1,15 +1,17 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
-import AudioUploadField from "./AudioUploadField";
+
 import {
   updateArticleTR,
   uploadCoverForArticle,
+  uploadAudioForArticle,
 } from "./actions";
 import ContentEditor from "./ContentEditor";
 import CoverPicker from "./CoverPicker";
-import type { CSSProperties } from "react";
 
 type CategoryRow = { id: string; title_tr: string | null };
 
@@ -38,44 +40,52 @@ export default async function EditArticlePage({
   params,
   searchParams,
 }: {
-  params: { id: string } | Promise<{ id: string }>;
+  params: { id: string };
   searchParams?: { [key: string]: string | string[] | undefined };
 }) {
   await requireAdmin();
+
   const supabase = await createClient();
+  const id = params.id;
 
-  // ✅ params Promise olabileceği için güvenli çöz
-  const resolvedParams = await Promise.resolve(params);
-  const id = resolvedParams.id;
-
-  // ✅ query string ile action hatalarını sayfada göstermek için
+  // ✅ Query string hata mesajları
   const coverErrorRaw = searchParams?.coverError;
   const coverError =
     typeof coverErrorRaw === "string" ? decodeURIComponent(coverErrorRaw) : null;
 
+  const audioErrorRaw = searchParams?.audioError;
+  const audioError =
+    typeof audioErrorRaw === "string" ? decodeURIComponent(audioErrorRaw) : null;
+
+  // ✅ Makale
   const { data: article, error: aErr } = await supabase
     .from("articles")
     .select("id, status, created_at, category_id, cover_asset_id")
     .eq("id", id)
     .single();
 
-  if (aErr || !article) notFound();
+  if (aErr || !article) {
+    notFound();
+  }
 
+  // ✅ TR translation
   const { data: tr, error: tErr } = await supabase
     .from("article_translations")
     .select(
-      "title,summary,content_html,slug,seo_title,seo_description,audio_asset_id"
+      "title,summary,content_html,slug,seo_title,seo_description,audio_asset_id",
     )
     .eq("article_id", id)
     .eq("lang", "tr")
     .single<TrRow>();
 
+  // ✅ Kategoriler
   const { data: categories, error: cErr } = await supabase
     .from("categories")
     .select("id, title_tr")
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
+  // ✅ Assets
   const { data: assetsData, error: asErr } = await supabase
     .from("assets")
     .select("id,bucket,path,created_at,bytes,content_type,width,height")
@@ -84,9 +94,9 @@ export default async function EditArticlePage({
 
   const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
 
-  // ✅ sadece audio olanlar (mevcut bağlı sesi göstermek ve pick paramını yorumlamak için)
+  // ✅ Audio / Image listeleri
   const audioAssets = assets.filter((a) =>
-    String(a.content_type ?? "").startsWith("audio/")
+    String(a.content_type ?? "").startsWith("audio/"),
   );
 
   const imageAssetsForPicker = assets
@@ -112,7 +122,7 @@ export default async function EditArticlePage({
     audio_asset_id: tr?.audio_asset_id ?? null,
   };
 
-  // ✅ Assets sayfasından pick ile dönülürse override edelim
+  // ✅ Assets’ten geri dönüş parametreleri
   const pickCoverRaw = searchParams?.pickCover;
   const pickedCoverId = typeof pickCoverRaw === "string" ? pickCoverRaw : null;
 
@@ -122,7 +132,7 @@ export default async function EditArticlePage({
   const coverDefaultValue = pickedCoverId ?? (article.cover_asset_id ?? "");
   const audioDefaultValue = pickedAudioId ?? (trData.audio_asset_id ?? "");
 
-  // ✅ Mevcut kapak önizleme URL’i (defaultValue ile uyumlu)
+  // ✅ Mevcut kapak / audio
   const currentCoverId = coverDefaultValue || null;
   const currentCover = assets.find((a) => a.id === currentCoverId);
 
@@ -133,14 +143,14 @@ export default async function EditArticlePage({
           .getPublicUrl(currentCover.path).data.publicUrl
       : "";
 
-  // ✅ Mevcut audio bilgisi (defaultValue ile uyumlu)
   const currentAudioId = audioDefaultValue || null;
-  const currentAudio = audioAssets.find((a) => a.id === currentAudioId) ?? null;
+  const currentAudio = assets.find((a) => a.id === currentAudioId);
 
   const returnTo = `/dashboard/articles/${article.id}/edit`;
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Edit Article</h1>
 
@@ -153,9 +163,13 @@ export default async function EditArticlePage({
         </div>
       </div>
 
-      {/* ✅ Action hata mesajları */}
+      {/* Hata kutuları */}
       {coverError ? (
         <div style={alertErrorBox}>Kapak upload hatası: {coverError}</div>
+      ) : null}
+
+      {audioError ? (
+        <div style={alertErrorBox}>Ses upload hatası: {audioError}</div>
       ) : null}
 
       {tErr ? (
@@ -176,7 +190,7 @@ export default async function EditArticlePage({
         </p>
       ) : null}
 
-      {/* ✅ Kapak upload + otomatik bağlama (aynı kaldı) */}
+      {/* ✅ Kapak upload + otomatik bağlama */}
       <div
         style={{
           marginTop: 16,
@@ -201,13 +215,14 @@ export default async function EditArticlePage({
         >
           <input type="hidden" name="article_id" value={article.id} />
           <input type="file" name="file" accept="image/*" required />
+
           <button type="submit" style={btnSecondary}>
             Kapak Upload + Otomatik Bağla
           </button>
 
           <Link
             href={`/dashboard/assets?mode=pick&kind=cover&return_to=${encodeURIComponent(
-              returnTo
+              returnTo,
             )}`}
             target="_blank"
             rel="noreferrer"
@@ -217,18 +232,14 @@ export default async function EditArticlePage({
           </Link>
         </form>
 
-        {/* ✅ Mevcut kapak önizleme */}
         {coverPreviewUrl ? (
           <div style={{ marginTop: 4 }}>
             <div
-              style={{
-                fontSize: 12,
-                opacity: 0.7,
-                marginBottom: 6,
-              }}
+              style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}
             >
               Mevcut kapak önizleme:
             </div>
+
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={coverPreviewUrl}
@@ -240,12 +251,9 @@ export default async function EditArticlePage({
                 border: "1px solid #eee",
               }}
             />
+
             <div
-              style={{
-                fontSize: 12,
-                opacity: 0.7,
-                marginTop: 6,
-              }}
+              style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}
             >
               {currentCover?.path ?? ""}
             </div>
@@ -257,9 +265,72 @@ export default async function EditArticlePage({
         )}
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
-          makaleye “cover” olarak bağlar.
+          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak
+          bu makaleye “cover” olarak bağlar.
         </div>
+      </div>
+
+      {/* ✅ Audio upload + otomatik bağlama */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Ses Dosyası (Upload)</div>
+
+        <form
+          action={uploadAudioForArticle}
+          encType="multipart/form-data"
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <input type="hidden" name="article_id" value={article.id} />
+
+          <input
+            type="file"
+            name="file"
+            accept="audio/*,.mp3,.mpeg"
+            required
+          />
+
+          <button type="submit" style={btnSecondary}>
+            Ses Upload + Otomatik Bağla
+          </button>
+
+          <Link
+            href={`/dashboard/assets?mode=pick&kind=audio&return_to=${encodeURIComponent(
+              returnTo,
+            )}`}
+            target="_blank"
+            rel="noreferrer"
+            style={btnSecondaryLink}
+          >
+            Assets’e Git
+          </Link>
+        </form>
+
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          Not: Önce makaleyi “Save” edip TR kaydı oluşsun. Sonra ses yükleyin.
+        </div>
+
+        {currentAudio ? (
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Bağlı ses: <b>{currentAudio.path}</b>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.65 }}>
+            Bu makaleye bağlı bir ses yok.
+          </div>
+        )}
       </div>
 
       {/* ✅ Ana kayıt formu */}
@@ -298,38 +369,31 @@ export default async function EditArticlePage({
           </select>
         </label>
 
-        {/* ✅ SES: Client tarafı upload + audio_asset_id hidden */}
+        {/* Audio seçimi */}
         <label style={label}>
           <div>Ses Dosyası (Audio)</div>
-
-          <AudioUploadField
-            articleId={article.id}
-            initialAssetId={audioDefaultValue || null}
-            initialPath={currentAudio?.path ?? null}
-          />
+          <select
+            name="audio_asset_id"
+            defaultValue={audioDefaultValue}
+            style={input}
+          >
+            <option value="">- Ses ekleme -</option>
+            {audioAssets.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.path}
+                {typeof a.bytes === "number"
+                  ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
+                  : ""}
+              </option>
+            ))}
+          </select>
 
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Her içerik için tek ses dosyası. İstersen aşağıdan yeni ses
-            yükleyebilir, istersen Assets sayfasında daha önce yüklediğin bir
-            dosyayı seçip bu sayfaya <code>?pickAudio=ID</code> ile
-            döndürebilirsin.
-          </div>
-
-          <div style={{ marginTop: 6 }}>
-            <Link
-              href={`/dashboard/assets?mode=pick&kind=audio&return_to=${encodeURIComponent(
-                returnTo
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              style={btnSecondaryLink}
-            >
-              Assets’te Ses Dosyası Seç
-            </Link>
+            Not: Her içerik için tek ses dosyası.
           </div>
         </label>
 
-        {/* ✅ Cover seçimi (önizlemeli CoverPicker) */}
+        {/* Cover seçimi */}
         <div style={label}>
           <div>Cover (assets)</div>
 
@@ -341,13 +405,17 @@ export default async function EditArticlePage({
           />
 
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Kapak artık önizlemeli seçilir. (Select kaldırıldı.)
+            Not: Kapak artık önizlemeli seçilir.
           </div>
         </div>
 
         <label style={label}>
           <div>Başlık (TR)</div>
-          <input name="title" defaultValue={trData.title} style={input} />
+          <input
+            name="title"
+            defaultValue={trData.title}
+            style={input}
+          />
         </label>
 
         <label style={label}>
@@ -387,7 +455,11 @@ export default async function EditArticlePage({
         >
           <label style={label}>
             <div>Slug (TR)</div>
-            <input name="slug" defaultValue={trData.slug} style={input} />
+            <input
+              name="slug"
+              defaultValue={trData.slug}
+              style={input}
+            />
           </label>
 
           <label style={label}>
@@ -460,7 +532,7 @@ const btnSecondaryLink: CSSProperties = {
 const btnSecondary: CSSProperties = {
   padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid "#ddd",
+  border: "1px solid #ddd",
   background: "#fff",
   color: "#111",
   cursor: "pointer",
