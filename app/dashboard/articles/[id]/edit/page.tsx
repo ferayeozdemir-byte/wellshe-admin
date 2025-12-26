@@ -4,11 +4,7 @@ import type { CSSProperties } from "react";
 
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
-import {
-  updateArticleTR,
-  uploadCoverForArticle,
-  uploadAudioForArticle,
-} from "./actions";
+import { updateArticleTR, uploadCoverForArticle } from "./actions";
 import ContentEditor from "./ContentEditor";
 import CoverPicker from "./CoverPicker";
 
@@ -50,7 +46,9 @@ export default async function EditArticlePage(props: Props) {
   const resolvedParams = await Promise.resolve(props.params);
   const id = resolvedParams.id;
 
-  const resolvedSearchParams = await Promise.resolve(props.searchParams ?? {});
+  const resolvedSearchParams = (await Promise.resolve(
+    props.searchParams ?? {}
+  )) as { [key: string]: string | string[] | undefined };
 
   const getQueryParam = (key: string): string | null => {
     const raw = resolvedSearchParams[key];
@@ -142,8 +140,9 @@ export default async function EditArticlePage(props: Props) {
 
   const coverPreviewUrl =
     currentCover?.bucket && currentCover?.path
-      ? supabase.storage.from(currentCover.bucket).getPublicUrl(currentCover.path)
-          .data.publicUrl
+      ? supabase.storage.from(currentCover.bucket).getPublicUrl(
+          currentCover.path
+        ).data.publicUrl
       : "";
 
   // Mevcut audio
@@ -254,65 +253,11 @@ export default async function EditArticlePage(props: Props) {
         )}
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Upload sonrası sistem yeni asset oluşturur ve otomatik olarak bu
-          makaleye “cover” olarak bağlar.
+          Not: Kapak küçük görsel olduğu için buradan upload etmekte sorun yok.
         </div>
       </div>
 
-      {/* Audio upload */}
-      <div
-        style={{
-          marginTop: 16,
-          padding: 12,
-          border: "1px solid #eee",
-          borderRadius: 12,
-          display: "grid",
-          gap: 10,
-        }}
-      >
-        <div style={{ fontWeight: 800 }}>Ses Dosyası (Upload)</div>
-
-        <form
-          action={uploadAudioForArticle}
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <input type="hidden" name="article_id" value={article.id} />
-          <input type="file" name="file" accept="audio/*,.mp3,.mpeg" required />
-          <button type="submit" style={btnSecondary}>
-            Ses Upload + Otomatik Bağla
-          </button>
-
-          <Link
-            href={`/dashboard/assets?mode=pick&kind=audio&return_to=${encodeURIComponent(
-              returnTo
-            )}`}
-            target="_blank"
-            rel="noreferrer"
-            style={btnSecondaryLink}
-          >
-            Assets’e Git
-          </Link>
-        </form>
-
-        <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Not: Önce makaleyi “Save” edip TR kaydı oluşsun. Sonra ses yükleyin.
-        </div>
-
-        {currentAudio ? (
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            Bağlı ses: <b>{currentAudio.path}</b>
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, opacity: 0.65 }}>
-            Bu makaleye bağlı bir ses yok.
-          </div>
-        )}
-      </div>
+      {/* Audio upload BLOĞU KALDIRILDI — sadece Assets’ten seçiyoruz */}
 
       {/* Ana kayıt formu */}
       <form action={updateArticleTR} style={{ marginTop: 16, display: "grid", gap: 12 }}>
@@ -357,8 +302,14 @@ export default async function EditArticlePage(props: Props) {
             ))}
           </select>
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            Not: Her içerik için tek ses dosyası.
+            Not: Büyük ses dosyalarını önce Assets sayfasından yükleyip
+            buradan seçin.
           </div>
+          {currentAudio && (
+            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+              Şu an bağlı ses: <b>{currentAudio.path}</b>
+            </div>
+          )}
         </label>
 
         <div style={label}>
@@ -490,8 +441,8 @@ const alertErrorBox: CSSProperties = {
   marginTop: 12,
   padding: 12,
   borderRadius: 12,
-  border: "1px solid rgba(220,20,60,0.35)",
-  background: "rgba(220,20,60,0.08)",
+  border: "1px solid rgba(220, 20, 60, 0.35)",
+  background: "rgba(220, 20, 60, 0.08)",
   color: "crimson",
   fontWeight: 800,
 };
