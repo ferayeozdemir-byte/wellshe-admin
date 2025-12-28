@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import LinkExtension from "@tiptap/extension-link"; // 🔗 YENİ
 
 export type AssetMiniRow = {
   id: string;
@@ -68,12 +69,23 @@ export default function ContentEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        // İstersen list vb. davranışları burada özelleştirebiliriz
+      }),
       Image.configure({
         inline: false,
         allowBase64: false,
         HTMLAttributes: {
           loading: "lazy",
+        },
+      }),
+      LinkExtension.configure({
+        openOnClick: false, // Panelde tıklayınca linke gitmesin
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: {
+          rel: "noopener noreferrer",
+          target: "_blank",
         },
       }),
     ],
@@ -122,6 +134,40 @@ export default function ContentEditor({
     setPickerOpen(false);
   }
 
+  function addLink() {
+    if (!editor) return;
+
+    const previousUrl = editor.getAttributes("link").href as string | undefined;
+
+    const url = window.prompt(
+      "Bağlantı adresi (https://...):",
+      previousUrl && typeof previousUrl === "string" ? previousUrl : "https://"
+    );
+
+    if (!url) {
+      return;
+    }
+
+    // Küçük güvenlik filtresi: javascript: vb. istemiyoruz
+    const trimmed = url.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      alert("Lütfen http:// veya https:// ile başlayan geçerli bir URL girin.");
+      return;
+    }
+
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: trimmed })
+      .run();
+  }
+
+  function removeLink() {
+    if (!editor) return;
+    editor.chain().focus().unsetLink().run();
+  }
+
   if (!editor) return null;
 
   return (
@@ -166,6 +212,23 @@ export default function ContentEditor({
           style={btn}
         >
           • Liste
+        </button>
+
+        {/* 🔗 Link Ekle / Kaldır */}
+        <button
+          type="button"
+          onClick={addLink}
+          style={{ ...btn, fontWeight: 900 }}
+        >
+          🔗 Link Ekle
+        </button>
+
+        <button
+          type="button"
+          onClick={removeLink}
+          style={btn}
+        >
+          Linki Kaldır
         </button>
 
         <button
@@ -312,6 +375,16 @@ export default function ContentEditor({
 
         .wellshe-editor.ProseMirror strong {
           font-weight: 700;
+        }
+
+        .wellshe-editor.ProseMirror em {
+          font-style: italic;
+        }
+
+        .wellshe-editor.ProseMirror a {
+          color: #B0756F;
+          text-decoration: underline;
+          font-weight: 600;
         }
 
         .wellshe-editor.ProseMirror ul {
