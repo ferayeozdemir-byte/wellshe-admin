@@ -191,11 +191,6 @@ export default function ContentEditor({
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={toolbar}>
-
-        <div style={{ width: "100%", color: "red", fontWeight: 900 }}>
-  TEST AUDIO TOOLBAR
-</div>
-
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -244,11 +239,7 @@ export default function ContentEditor({
           🔗 Link Ekle
         </button>
 
-        <button
-          type="button"
-          onClick={removeLink}
-          style={btn}
-        >
+        <button type="button" onClick={removeLink} style={btn}>
           Linki Kaldır
         </button>
 
