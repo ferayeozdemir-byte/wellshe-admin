@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import LinkExtension from "@tiptap/extension-link"; // 🔗 YENİ
+import LinkExtension from "@tiptap/extension-link";
 
 export type AssetMiniRow = {
   id: string;
@@ -31,7 +31,7 @@ export default function ContentEditor({
   name,
   initialHTML,
   assets,
-  maxBytes = 2 * 1024 * 1024, // 2MB
+  maxBytes = 2 * 1024 * 1024,
   maxWidth = 2400,
   maxHeight = 2400,
 }: {
@@ -42,11 +42,20 @@ export default function ContentEditor({
   maxWidth?: number;
   maxHeight?: number;
 }) {
-  const [isPickerOpen, setPickerOpen] = useState(false);
+  const [isImagePickerOpen, setImagePickerOpen] = useState(false);
+  const [isAudioPickerOpen, setAudioPickerOpen] = useState(false);
   const [html, setHtml] = useState(initialHTML ?? "");
 
   const imageAssets = useMemo(() => {
-    return (assets ?? []).filter((a) => (a.content_type ?? "").startsWith("image/"));
+    return (assets ?? []).filter((a) =>
+      String(a.content_type ?? "").startsWith("image/")
+    );
+  }, [assets]);
+
+  const audioAssets = useMemo(() => {
+    return (assets ?? []).filter((a) =>
+      String(a.content_type ?? "").startsWith("audio/")
+    );
   }, [assets]);
 
   const bigIds = useMemo(() => {
@@ -69,9 +78,7 @@ export default function ContentEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        // İstersen list vb. davranışları burada özelleştirebiliriz
-      }),
+      StarterKit.configure({}),
       Image.configure({
         inline: false,
         allowBase64: false,
@@ -80,7 +87,7 @@ export default function ContentEditor({
         },
       }),
       LinkExtension.configure({
-        openOnClick: false, // Panelde tıklayınca linke gitmesin
+        openOnClick: false,
         autolink: true,
         linkOnPaste: true,
         HTMLAttributes: {
@@ -90,7 +97,7 @@ export default function ContentEditor({
       }),
     ],
     content: initialHTML ?? "",
-    immediatelyRender: false, // ✅ Tiptap SSR uyarısını çözen kritik ayar
+    immediatelyRender: false,
     onUpdate({ editor }) {
       setHtml(editor.getHTML());
     },
@@ -131,7 +138,21 @@ export default function ContentEditor({
     }
 
     editor.chain().focus().setImage({ src: url }).run();
-    setPickerOpen(false);
+    setImagePickerOpen(false);
+  }
+
+  function insertAudioFromAsset(asset: AssetMiniRow) {
+    if (!editor) return;
+
+    editor
+      .chain()
+      .focus()
+      .insertContent(
+        `<wellshe-audio data-asset-id="${asset.id}"></wellshe-audio><p></p>`
+      )
+      .run();
+
+    setAudioPickerOpen(false);
   }
 
   function addLink() {
@@ -144,11 +165,8 @@ export default function ContentEditor({
       previousUrl && typeof previousUrl === "string" ? previousUrl : "https://"
     );
 
-    if (!url) {
-      return;
-    }
+    if (!url) return;
 
-    // Küçük güvenlik filtresi: javascript: vb. istemiyoruz
     const trimmed = url.trim();
     if (!/^https?:\/\//i.test(trimmed)) {
       alert("Lütfen http:// veya https:// ile başlayan geçerli bir URL girin.");
@@ -172,7 +190,6 @@ export default function ContentEditor({
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {/* Toolbar */}
       <div style={toolbar}>
         <button
           type="button"
@@ -214,7 +231,6 @@ export default function ContentEditor({
           • Liste
         </button>
 
-        {/* 🔗 Link Ekle / Kaldır */}
         <button
           type="button"
           onClick={addLink}
@@ -233,30 +249,35 @@ export default function ContentEditor({
 
         <button
           type="button"
-          onClick={() => setPickerOpen(true)}
+          onClick={() => setImagePickerOpen(true)}
           style={{ ...btn, fontWeight: 900 }}
         >
           📷 Görsel Ekle (Assets)
         </button>
+
+        <button
+          type="button"
+          onClick={() => setAudioPickerOpen(true)}
+          style={{ ...btn, fontWeight: 900 }}
+        >
+          🎵 Ses Ekle (Assets)
+        </button>
       </div>
 
-      {/* Editor */}
       <div style={editorBox}>
         <EditorContent editor={editor} />
       </div>
 
-      {/* Form submit için hidden */}
       <textarea name={name} value={html} readOnly style={{ display: "none" }} />
 
-      {/* Picker Modal */}
-      {isPickerOpen && (
-        <div style={modalOverlay} onClick={() => setPickerOpen(false)}>
+      {isImagePickerOpen && (
+        <div style={modalOverlay} onClick={() => setImagePickerOpen(false)}>
           <div style={modal} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ fontWeight: 900 }}>Assets’ten Görsel Seç</div>
               <button
                 type="button"
-                onClick={() => setPickerOpen(false)}
+                onClick={() => setImagePickerOpen(false)}
                 style={{ marginLeft: "auto", ...btn }}
               >
                 Kapat
@@ -342,7 +363,100 @@ export default function ContentEditor({
         </div>
       )}
 
-      {/* TipTap CSS */}
+      {isAudioPickerOpen && (
+        <div style={modalOverlay} onClick={() => setAudioPickerOpen(false)}>
+          <div style={modal} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ fontWeight: 900 }}>Assets’ten Ses Dosyası Seç</div>
+              <button
+                type="button"
+                onClick={() => setAudioPickerOpen(false)}
+                style={{ marginLeft: "auto", ...btn }}
+              >
+                Kapat
+              </button>
+            </div>
+
+            <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+              Not: Sadece <b>audio/*</b> olan dosyalar listelenir. Seçilen ses,
+              imlecin bulunduğu yere içerik bloğu olarak eklenir.
+            </div>
+
+            <div style={assetGrid}>
+              {audioAssets.map((a) => {
+                const sizeLabel =
+                  typeof a.bytes === "number"
+                    ? `${bytesToMB(a.bytes).toFixed(2)} MB`
+                    : "Boyut bilinmiyor";
+
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => insertAudioFromAsset(a)}
+                    style={assetCard}
+                    title={a.path}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.8,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {a.path}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        marginTop: 8,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={badgeAudio}>Ses</span>
+                      <span style={{ fontSize: 12, opacity: 0.65 }}>{sizeLabel}</span>
+                      <span style={{ fontSize: 12, opacity: 0.65 }}>{a.bucket}</span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: 12,
+                        borderRadius: 10,
+                        border: "1px solid #eee",
+                        background: "#faf7f7",
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      🎵 Bu sesi içeriğe ekle
+                    </div>
+                  </button>
+                );
+              })}
+
+              {audioAssets.length === 0 && (
+                <div
+                  style={{
+                    padding: 16,
+                    borderRadius: 12,
+                    border: "1px solid #eee",
+                    background: "#fff",
+                    fontSize: 14,
+                    color: "#555",
+                  }}
+                >
+                  Henüz yüklenmiş ses dosyası yok.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .wellshe-editor.ProseMirror {
           outline: none;
@@ -408,6 +522,21 @@ export default function ContentEditor({
 
         .wellshe-editor.ProseMirror img.ProseMirror-selectednode {
           outline: 2px solid #111;
+        }
+
+        .wellshe-editor.ProseMirror wellshe-audio {
+          display: block;
+          margin: 12px 0;
+          padding: 12px 14px;
+          border-radius: 12px;
+          border: 1px dashed #d7a7af;
+          background: #fdf1f3;
+        }
+
+        .wellshe-editor.ProseMirror wellshe-audio::before {
+          content: "🎵 Ses bloğu eklendi";
+          font-weight: 700;
+          color: #7a4850;
         }
       `}</style>
     </div>
@@ -496,4 +625,13 @@ const badgeDim: React.CSSProperties = {
   borderRadius: 999,
   border: "1px solid #0b6",
   background: "#f0fff8",
+};
+
+const badgeAudio: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  padding: "3px 8px",
+  borderRadius: 999,
+  border: "1px solid #7a4850",
+  background: "#fdf1f3",
 };
