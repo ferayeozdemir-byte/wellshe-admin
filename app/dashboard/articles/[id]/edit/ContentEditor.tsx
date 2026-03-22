@@ -148,7 +148,7 @@ export default function ContentEditor({
       .chain()
       .focus()
       .insertContent(
-        `<wellshe-audio data-asset-id="${asset.id}"></wellshe-audio><p></p>`
+        `<div data-wellshe-audio="${asset.id}"></div><p></p>`
       )
       .run();
 
@@ -520,7 +520,7 @@ export default function ContentEditor({
           outline: 2px solid #111;
         }
 
-        .wellshe-editor.ProseMirror wellshe-audio {
+        .wellshe-editor.ProseMirror div[data-wellshe-audio] {
           display: block;
           margin: 12px 0;
           padding: 12px 14px;
@@ -529,7 +529,7 @@ export default function ContentEditor({
           background: #fdf1f3;
         }
 
-        .wellshe-editor.ProseMirror wellshe-audio::before {
+        .wellshe-editor.ProseMirror div[data-wellshe-audio]::before {
           content: "🎵 Ses bloğu eklendi";
           font-weight: 700;
           color: #7a4850;
