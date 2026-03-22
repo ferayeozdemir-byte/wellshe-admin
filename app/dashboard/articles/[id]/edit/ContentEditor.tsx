@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import { Node } from "@tiptap/core";
 import LinkExtension from "@tiptap/extension-link";
 
 export type AssetMiniRow = {
@@ -22,6 +23,38 @@ function publicAssetUrl(bucket: string, path: string) {
   if (!base) return "";
   return `${base}/storage/v1/object/public/${bucket}/${path}`;
 }
+
+const AudioBlock = Node.create({
+  name: "audioBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      assetId: {
+        default: null,
+        parseHTML: (element) =>
+          element.getAttribute("data-asset-id") ||
+          element.getAttribute("data-wellshe-audio"),
+        renderHTML: (attributes) => ({
+          "data-asset-id": attributes.assetId,
+        }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'wellshe-audio[data-asset-id]' },
+      { tag: 'div[data-wellshe-audio]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["wellshe-audio", HTMLAttributes];
+  },
+});
 
 function bytesToMB(bytes: number) {
   return bytes / (1024 * 1024);
@@ -79,6 +112,7 @@ export default function ContentEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({}),
+      AudioBlock,
       Image.configure({
         inline: false,
         allowBase64: false,
@@ -147,9 +181,15 @@ export default function ContentEditor({
     editor
       .chain()
       .focus()
-      .insertContent(
-        `<div data-wellshe-audio="${asset.id}"></div><p></p>`
-      )
+      .insertContent([
+        {
+          type: "audioBlock",
+          attrs: { assetId: asset.id },
+        },
+        {
+          type: "paragraph",
+        },
+      ])
       .run();
 
     setAudioPickerOpen(false);
@@ -520,7 +560,7 @@ export default function ContentEditor({
           outline: 2px solid #111;
         }
 
-        .wellshe-editor.ProseMirror div[data-wellshe-audio] {
+        .wellshe-editor.ProseMirror wellshe-audio {
           display: block;
           margin: 12px 0;
           padding: 12px 14px;
@@ -529,7 +569,7 @@ export default function ContentEditor({
           background: #fdf1f3;
         }
 
-        .wellshe-editor.ProseMirror div[data-wellshe-audio]::before {
+        .wellshe-editor.ProseMirror wellshe-audio::before {
           content: "🎵 Ses bloğu eklendi";
           font-weight: 700;
           color: #7a4850;
