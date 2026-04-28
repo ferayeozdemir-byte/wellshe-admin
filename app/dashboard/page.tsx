@@ -22,6 +22,7 @@ export default function DashboardPage() {
         <Link href="/dashboard/assets">Assets</Link>
         <Link href="/dashboard/categories">Categories</Link>
         <Link href="/dashboard/weekly">Weekly</Link>
+        <Link href="/dashboard/practices">Practices</Link>
       </div>
 
       <button onClick={logout} style={{ marginTop: 24 }}>
