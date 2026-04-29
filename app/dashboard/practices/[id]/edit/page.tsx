@@ -1,18 +1,33 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { updatePractice } from "../../actions";
+import CoverPicker from "../../../articles/[id]/edit/CoverPicker";
 
-export default async function EditPracticePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+type AssetMiniRow = {
+  id: string;
+  bucket: string;
+  path: string;
+  created_at: string | null;
+  bytes: number | null;
+  content_type: string | null;
+  width: number | null;
+  height: number | null;
+};
+
+type Props = {
+  params: { id: string } | Promise<{ id: string }>;
+};
+
+export default async function EditPracticePage(props: Props) {
   await requireAdmin();
-
-  const { id } = await params;
   const supabase = await createClient();
+
+  const resolvedParams = await Promise.resolve(props.params);
+  const id = resolvedParams.id;
 
   const { data: practice, error } = await supabase
     .from("breathing_practices")
@@ -20,19 +35,69 @@ export default async function EditPracticePage({
     .eq("id", id)
     .single();
 
-  if (error || !practice) {
-    notFound();
-  }
+  if (error || !practice) notFound();
+
+  const { data: assetsData, error: asErr } = await supabase
+    .from("assets")
+    .select("id,bucket,path,created_at,bytes,content_type,width,height")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
+
+  const audioAssets = assets.filter((a) =>
+    String(a.content_type ?? "").startsWith("audio/")
+  );
+
+  const imageAssetsForPicker = assets
+    .filter((a) => String(a.content_type ?? "").startsWith("image/"))
+    .map((a) => ({
+      id: a.id,
+      bucket: a.bucket,
+      path: a.path,
+      content_type: a.content_type ?? null,
+      bytes: a.bytes ?? null,
+      publicUrl:
+        supabase.storage.from(a.bucket).getPublicUrl(a.path).data.publicUrl,
+    }));
+
+  const currentCoverId = practice.cover_asset_id ?? null;
+  const currentCover = assets.find((a) => a.id === currentCoverId);
+
+  const coverPreviewUrl =
+    currentCover?.bucket && currentCover?.path
+      ? supabase.storage.from(currentCover.bucket).getPublicUrl(
+          currentCover.path
+        ).data.publicUrl
+      : "";
+
+  const currentAudioId = practice.audio_asset_id ?? null;
+  const currentAudio = assets.find((a) => a.id === currentAudioId);
 
   return (
     <div style={{ padding: 24, maxWidth: 920 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
         <h1 style={{ margin: 0 }}>Edit Practice</h1>
 
         <Link href="/dashboard/practices" style={{ textDecoration: "none" }}>
           ← Practices
         </Link>
+
+        <div style={{ marginLeft: "auto", opacity: 0.7, fontSize: 12 }}>
+          ID: {practice.id}
+        </div>
       </div>
+
+      {asErr ? (
+        <p style={{ color: "crimson" }}>Assets okunamadı: {asErr.message}</p>
+      ) : null}
 
       <form action={updatePractice} style={{ display: "grid", gap: 18 }}>
         <input type="hidden" name="id" value={practice.id} />
@@ -53,8 +118,8 @@ export default async function EditPracticePage({
             <label style={label}>
               <span>Tür</span>
               <select name="kind" defaultValue={practice.kind} style={input}>
-                <option value="breath">breath</option>
-                <option value="meditation">meditation</option>
+                <option value="breath">Nefes Egzersizi</option>
+                <option value="meditation">Meditasyon</option>
               </select>
             </label>
           </div>
@@ -85,59 +150,83 @@ export default async function EditPracticePage({
               name="summary"
               defaultValue={practice.summary ?? ""}
               style={textarea}
-              placeholder="Kart üzerinde görünecek kısa açıklama"
+              placeholder="Kart düzeninde görünecek kısa açıklama"
+              rows={4}
             />
           </label>
         </div>
 
         <div style={card}>
-          <h3 style={sectionTitle}>Asset ve Görünüm</h3>
+          <h3 style={sectionTitle}>Kapak ve Ses</h3>
 
-          <label style={label}>
-            <span>Kapak asset id</span>
-            <input
+          <div style={label}>
+            <span>Kapak görseli</span>
+            <CoverPicker
               name="cover_asset_id"
+              assets={imageAssetsForPicker}
               defaultValue={practice.cover_asset_id ?? ""}
-              style={input}
-              placeholder="UUID"
+              placeholder="Kapak ara"
             />
-          </label>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              Not: Kapak önizlemeli seçilir.
+            </div>
+          </div>
+
+          {coverPreviewUrl ? (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+                Mevcut kapak önizleme:
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={coverPreviewUrl}
+                alt="cover preview"
+                style={{
+                  width: 220,
+                  height: "auto",
+                  borderRadius: 12,
+                  border: "1px solid #eee",
+                }}
+              />
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                {currentCover?.path ?? ""}
+              </div>
+            </div>
+          ) : null}
 
           <label style={label}>
-            <span>Ses asset id</span>
-            <input
+            <span>Ses dosyası</span>
+            <select
               name="audio_asset_id"
               defaultValue={practice.audio_asset_id ?? ""}
               style={input}
-              placeholder="UUID"
-            />
+            >
+              <option value="">- Ses ekleme -</option>
+              {audioAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.path}
+                  {typeof a.bytes === "number"
+                    ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
+                    : ""}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              Not: Büyük ses dosyalarını önce Assets sayfasından yükleyip
+              buradan seçin.
+            </div>
+
+            {currentAudio && (
+              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                Şu an bağlı ses: <b>{currentAudio.path}</b>
+              </div>
+            )}
           </label>
-
-          <div style={grid2}>
-            <label style={label}>
-              <span>Accent color</span>
-              <input
-                name="accent_color"
-                defaultValue={practice.accent_color ?? ""}
-                style={input}
-                placeholder="#CFA7F2"
-              />
-            </label>
-
-            <label style={label}>
-              <span>Slug</span>
-              <input
-                name="slug"
-                defaultValue={practice.slug ?? ""}
-                style={input}
-                placeholder="rahatlama"
-              />
-            </label>
-          </div>
         </div>
 
         <div style={card}>
-          <h3 style={sectionTitle}>Sıralama ve Süre</h3>
+          <h3 style={sectionTitle}>Sıralama ve Ayarlar</h3>
 
           <div style={grid2}>
             <label style={label}>
@@ -163,7 +252,36 @@ export default async function EditPracticePage({
             </label>
           </div>
 
-          <label style={{ ...label, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <div style={grid2}>
+            <label style={label}>
+              <span>Accent color</span>
+              <input
+                name="accent_color"
+                defaultValue={practice.accent_color ?? ""}
+                style={input}
+                placeholder="#CFA7F2"
+              />
+            </label>
+
+            <label style={label}>
+              <span>Slug</span>
+              <input
+                name="slug"
+                defaultValue={practice.slug ?? ""}
+                style={input}
+                placeholder="rahatlama"
+              />
+            </label>
+          </div>
+
+          <label
+            style={{
+              ...label,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
             <input
               type="checkbox"
               name="is_featured"
