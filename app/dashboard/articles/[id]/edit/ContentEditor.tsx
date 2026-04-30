@@ -79,6 +79,12 @@ export default function ContentEditor({
   const [isAudioPickerOpen, setAudioPickerOpen] = useState(false);
   const [html, setHtml] = useState(initialHTML ?? "");
 
+  const [imageInputValue, setImageInputValue] = useState("");
+  const [imageQuery, setImageQuery] = useState("");
+
+  const [audioInputValue, setAudioInputValue] = useState("");
+  const [audioQuery, setAudioQuery] = useState("");
+
   const imageAssets = useMemo(() => {
     return (assets ?? []).filter((a) =>
       String(a.content_type ?? "").startsWith("image/")
@@ -90,6 +96,28 @@ export default function ContentEditor({
       String(a.content_type ?? "").startsWith("audio/")
     );
   }, [assets]);
+
+  const filteredImageAssets = useMemo(() => {
+    const q = imageQuery.trim().toLowerCase();
+    if (!q) return imageAssets;
+
+    return imageAssets.filter((a) => {
+      const path = String(a.path ?? "").toLowerCase();
+      const bucket = String(a.bucket ?? "").toLowerCase();
+      return path.includes(q) || bucket.includes(q);
+    });
+  }, [imageAssets, imageQuery]);
+
+  const filteredAudioAssets = useMemo(() => {
+    const q = audioQuery.trim().toLowerCase();
+    if (!q) return audioAssets;
+
+    return audioAssets.filter((a) => {
+      const path = String(a.path ?? "").toLowerCase();
+      const bucket = String(a.bucket ?? "").toLowerCase();
+      return path.includes(q) || bucket.includes(q);
+    });
+  }, [audioAssets, audioQuery]);
 
   const bigIds = useMemo(() => {
     const set = new Set<string>();
@@ -325,8 +353,60 @@ export default function ContentEditor({
               çözünürlükte uyarı verir.
             </div>
 
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto",
+                gap: 10,
+                marginTop: 12,
+                alignItems: "center",
+              }}
+            >
+              <input
+                value={imageInputValue}
+                onChange={(e) => setImageInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    setImageQuery(imageInputValue);
+                  }
+                }}
+                placeholder="Görsel ara (örn: astroloji, uploads/...)"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  fontWeight: 600,
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => setImageQuery(imageInputValue)}
+                style={btn}
+              >
+                Ara
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setImageInputValue("");
+                  setImageQuery("");
+                }}
+                style={btn}
+              >
+                Temizle
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+              {filteredImageAssets.length} sonuç bulundu
+            </div>
+
             <div style={assetGrid}>
-              {imageAssets.map((a) => {
+              {filteredImageAssets.map((a) => {
                 const url = publicAssetUrl(a.bucket, a.path);
                 const isBig = bigIds.has(a.id);
                 const isHuge = hugeDimIds.has(a.id);
@@ -418,8 +498,60 @@ export default function ContentEditor({
               imlecin bulunduğu yere içerik bloğu olarak eklenir.
             </div>
 
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto",
+                gap: 10,
+                marginTop: 12,
+                alignItems: "center",
+              }}
+            >
+              <input
+                value={audioInputValue}
+                onChange={(e) => setAudioInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    setAudioQuery(audioInputValue);
+                  }
+                }}
+                placeholder="Ses ara (örn: meditation, nefes, uploads/...)"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  fontWeight: 600,
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={() => setAudioQuery(audioInputValue)}
+                style={btn}
+              >
+                Ara
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAudioInputValue("");
+                  setAudioQuery("");
+                }}
+                style={btn}
+              >
+                Temizle
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+              {filteredAudioAssets.length} sonuç bulundu
+            </div>
+
             <div style={assetGrid}>
-              {audioAssets.map((a) => {
+              {filteredAudioAssets.map((a) => {
                 const sizeLabel =
                   typeof a.bytes === "number"
                     ? `${bytesToMB(a.bytes).toFixed(2)} MB`
@@ -474,7 +606,7 @@ export default function ContentEditor({
                 );
               })}
 
-              {audioAssets.length === 0 && (
+              {filteredAudioAssets.length === 0 && (
                 <div
                   style={{
                     padding: 16,
