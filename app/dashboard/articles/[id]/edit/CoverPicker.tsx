@@ -25,7 +25,13 @@ export default function CoverPicker({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
+
+  // input içine yazılan değer
+  const [inputValue, setInputValue] = useState("");
+
+  // gerçekten filtrelemede kullanılan değer
+  const [query, setQuery] = useState("");
+
   const [selectedId, setSelectedId] = useState<string>(defaultValue ?? "");
 
   useEffect(() => {
@@ -38,10 +44,15 @@ export default function CoverPicker({
   );
 
   const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase();
+    const t = query.trim().toLowerCase();
     if (!t) return assets;
-    return assets.filter((a) => a.path.toLowerCase().includes(t));
-  }, [assets, q]);
+
+    return assets.filter((a) => {
+      const path = String(a.path ?? "").toLowerCase();
+      const bucket = String(a.bucket ?? "").toLowerCase();
+      return path.includes(t) || bucket.includes(t);
+    });
+  }, [assets, query]);
 
   const btn: React.CSSProperties = {
     padding: "10px 12px",
@@ -72,17 +83,30 @@ export default function CoverPicker({
     setOpen(false);
   }
 
+  function runSearch(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setQuery(inputValue);
+  }
+
+  function clearSearch(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setInputValue("");
+    setQuery("");
+  }
+
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <input type="hidden" name={name} value={selectedId} />
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" onClick={() => setOpen((s) => !s)} style={btn}>
           {selected ? "Kapak değiştir" : "Kapak seç"}
         </button>
 
         <div style={{ fontSize: 12, opacity: 0.75 }}>
-          {selected ? selected.path : placeholder ?? "Kapak ara (örn: covers/2025-12)"}
+          {selected ? selected.path : placeholder ?? "Kapak ara (örn: uploads/astroloji)"}
         </div>
 
         {open ? (
@@ -130,18 +154,45 @@ export default function CoverPicker({
             background: "#fff",
           }}
         >
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={placeholder ?? "Kapak ara (örn: covers/2025-12)"}
+          <div
             style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-              fontWeight: 600,
+              display: "grid",
+              gridTemplateColumns: "1fr auto auto",
+              gap: 10,
+              alignItems: "center",
             }}
-          />
+          >
+            <input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  setQuery(inputValue);
+                }
+              }}
+              placeholder={placeholder ?? "Kapak ara (örn: uploads/astroloji)"}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                fontWeight: 600,
+              }}
+            />
+
+            <button type="button" onClick={runSearch} style={btn}>
+              Ara
+            </button>
+
+            <button type="button" onClick={clearSearch} style={btn}>
+              Temizle
+            </button>
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+            {filtered.length} sonuç bulundu
+          </div>
 
           <div
             style={{
