@@ -96,7 +96,7 @@ export default async function EditArticlePage(props: Props) {
     .from("assets")
     .select("id,bucket,path,created_at,bytes,content_type,width,height")
     .order("created_at", { ascending: false })
-    .limit(200);
+    .range(0, 4999);
 
   const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
 
