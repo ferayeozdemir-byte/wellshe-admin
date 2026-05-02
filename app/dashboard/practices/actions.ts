@@ -1,23 +1,28 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 
-function nullableString(value: FormDataEntryValue | null) {
-  const v = String(value ?? "").trim();
-  return v ? v : null;
+function toNullableString(value: FormDataEntryValue | null) {
+  const s = String(value ?? "").trim();
+  return s ? s : null;
 }
 
-function numberValue(value: FormDataEntryValue | null, fallback: number) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
+function toNullableNumber(value: FormDataEntryValue | null) {
+  const s = String(value ?? "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toBoolean(value: FormDataEntryValue | null) {
+  return String(value ?? "") === "on";
 }
 
 export async function createPractice() {
   await requireAdmin();
-
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -26,19 +31,21 @@ export async function createPractice() {
       status: "draft",
       kind: "breath",
       title: "Yeni pratik",
-      technique_title: "",
-      summary: "",
+      technique_title: null,
+      summary: null,
+      cover_asset_id: null,
+      audio_asset_id: null,
       default_duration_seconds: 180,
       sort_order: 0,
-      is_featured: false,
       accent_color: "#CFA7F2",
+      is_featured: false,
       slug: null,
     })
     .select("id")
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Practice oluşturulamadı.");
+    throw new Error(error?.message || "Pratik oluşturulamadı");
   }
 
   revalidatePath("/dashboard/practices");
@@ -47,8 +54,41 @@ export async function createPractice() {
 
 export async function updatePractice(formData: FormData) {
   await requireAdmin();
+  const supabase = await createClient();
 
-  export async function deletePractice(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  if (!id) throw new Error("ID eksik");
+
+  const payload = {
+    status: String(formData.get("status") || "draft"),
+    kind: String(formData.get("kind") || "breath"),
+    title: String(formData.get("title") || "").trim(),
+    technique_title: toNullableString(formData.get("technique_title")),
+    summary: toNullableString(formData.get("summary")),
+    cover_asset_id: toNullableString(formData.get("cover_asset_id")),
+    audio_asset_id: toNullableString(formData.get("audio_asset_id")),
+    default_duration_seconds: toNullableNumber(
+      formData.get("default_duration_seconds")
+    ),
+    sort_order: toNullableNumber(formData.get("sort_order")),
+    accent_color:
+      String(formData.get("accent_color") || "").trim() || "#CFA7F2",
+    is_featured: toBoolean(formData.get("is_featured")),
+    slug: toNullableString(formData.get("slug")),
+  };
+
+  const { error } = await supabase
+    .from("breathing_practices")
+    .update(payload)
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dashboard/practices");
+  revalidatePath(`/dashboard/practices/${id}/edit`);
+}
+
+export async function deletePractice(formData: FormData) {
   await requireAdmin();
 
   const id = String(formData.get("id") || "");
@@ -64,45 +104,4 @@ export async function updatePractice(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/dashboard/practices");
-}
-  const supabase = await createClient();
-
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) throw new Error("Practice id bulunamadı.");
-
-  const status = String(formData.get("status") ?? "draft");
-  const kind = String(formData.get("kind") ?? "breath");
-
-  const payload = {
-    status,
-    kind,
-    title: String(formData.get("title") ?? "").trim(),
-    technique_title: nullableString(formData.get("technique_title")),
-    summary: nullableString(formData.get("summary")),
-    cover_asset_id: nullableString(formData.get("cover_asset_id")),
-    audio_asset_id: nullableString(formData.get("audio_asset_id")),
-    default_duration_seconds: Math.max(
-      1,
-      numberValue(formData.get("default_duration_seconds"), 180)
-    ),
-    sort_order: Math.max(0, numberValue(formData.get("sort_order"), 0)),
-    accent_color: nullableString(formData.get("accent_color")),
-    is_featured: formData.get("is_featured") === "on",
-    slug: nullableString(formData.get("slug")),
-    published_at: status === "published" ? new Date().toISOString() : null,
-  };
-
-  const { error } = await supabase
-    .from("breathing_practices")
-    .update(payload)
-    .eq("id", id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/dashboard/practices");
-  revalidatePath(`/dashboard/practices/${id}/edit`);
-
-  redirect(`/dashboard/practices/${id}/edit`);
 }
