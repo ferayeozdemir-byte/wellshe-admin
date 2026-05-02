@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { createPractice } from "./actions";
+import DeleteButton from "./DeleteButton";
 
 type PracticeRow = {
   id: string;
@@ -108,12 +109,10 @@ export default async function PracticesPage() {
 
                 <td style={td}>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Link
-                      href={`/dashboard/practices/${p.id}/edit`}
-                      style={btn}
-                    >
+                    <Link href={`/dashboard/practices/${p.id}/edit`} style={btn}>
                       Edit
                     </Link>
+                    <DeleteButton id={p.id} />
                   </div>
                 </td>
               </tr>

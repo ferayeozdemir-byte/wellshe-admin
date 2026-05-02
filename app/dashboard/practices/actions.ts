@@ -48,6 +48,23 @@ export async function createPractice() {
 export async function updatePractice(formData: FormData) {
   await requireAdmin();
 
+  export async function deletePractice(formData: FormData) {
+  await requireAdmin();
+
+  const id = String(formData.get("id") || "");
+  if (!id) throw new Error("ID eksik");
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("breathing_practices")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dashboard/practices");
+}
   const supabase = await createClient();
 
   const id = String(formData.get("id") ?? "").trim();
