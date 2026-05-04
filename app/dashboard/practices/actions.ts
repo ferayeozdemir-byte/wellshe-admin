@@ -86,6 +86,7 @@ export async function updatePractice(formData: FormData) {
 
   revalidatePath("/dashboard/practices");
   revalidatePath(`/dashboard/practices/${id}/edit`);
+  redirect("/dashboard/practices");
 }
 
 export async function deletePractice(formData: FormData) {
