@@ -13,6 +13,7 @@ type PracticeRow = {
   technique_title: string | null;
   created_at: string | null;
   sort_order: number | null;
+  is_featured: boolean;
 };
 
 export default async function PracticesPage() {
@@ -30,23 +31,42 @@ export default async function PracticesPage() {
       title,
       technique_title,
       created_at,
-      sort_order
+      sort_order,
+      is_featured
     `
     )
     .order("is_featured", { ascending: false })
     .order("sort_order", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
 
-  const practices: PracticeRow[] =
-    (rows ?? []).map((r: any) => ({
-      id: r.id as string,
-      status: r.status as string,
-      kind: r.kind as string,
-      title: r.title as string,
-      technique_title: (r.technique_title as string | null) ?? null,
-      created_at: (r.created_at as string | null) ?? null,
-      sort_order: (r.sort_order as number | null) ?? 0,
-    })) ?? [];
+  const practices: PracticeRow[] = ((rows ?? []) as any[])
+  .map((r) => ({
+    id: r.id as string,
+    status: r.status as string,
+    kind: r.kind as string,
+    title: r.title as string,
+    technique_title: (r.technique_title as string | null) ?? null,
+    created_at: (r.created_at as string | null) ?? null,
+    sort_order: (r.sort_order as number | null) ?? null,
+    is_featured: !!r.is_featured,
+  }))
+  .sort((a, b) => {
+    if (a.is_featured !== b.is_featured) {
+      return a.is_featured ? -1 : 1;
+    }
+
+    const aOrder = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+    const bOrder = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+    return bTime - aTime;
+  });
 
   return (
     <div style={{ padding: 24 }}>
