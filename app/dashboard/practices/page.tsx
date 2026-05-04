@@ -12,6 +12,7 @@ type PracticeRow = {
   title: string;
   technique_title: string | null;
   created_at: string | null;
+  updated_at: string | null;
   sort_order: number | null;
   is_featured: boolean;
 };
@@ -31,6 +32,7 @@ export default async function PracticesPage() {
       title,
       technique_title,
       created_at,
+      updated_at,
       sort_order,
       is_featured
     `
@@ -47,6 +49,7 @@ export default async function PracticesPage() {
     title: r.title as string,
     technique_title: (r.technique_title as string | null) ?? null,
     created_at: (r.created_at as string | null) ?? null,
+    updated_at: (r.updated_at as string | null) ?? null,
     sort_order: (r.sort_order as number | null) ?? null,
     is_featured: !!r.is_featured,
   }))
@@ -62,8 +65,17 @@ export default async function PracticesPage() {
       return aOrder - bOrder;
     }
 
-    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+    const aTime = a.updated_at
+      ? new Date(a.updated_at).getTime()
+      : a.created_at
+      ? new Date(a.created_at).getTime()
+      : 0;
+
+    const bTime = b.updated_at
+      ? new Date(b.updated_at).getTime()
+      : b.created_at
+      ? new Date(b.created_at).getTime()
+      : 0;
 
     return bTime - aTime;
   });
