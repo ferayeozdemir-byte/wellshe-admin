@@ -33,8 +33,9 @@ export default async function PracticesPage() {
       sort_order
     `
     )
+    .order("is_featured", { ascending: false })
     .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
 
   const practices: PracticeRow[] =
     (rows ?? []).map((r: any) => ({
