@@ -92,9 +92,11 @@ export default function ContentEditor({
   }, [assets]);
 
   const audioAssets = useMemo(() => {
-    return (assets ?? []).filter((a) =>
+    return (assets ?? []).filter((a) => {
+      const ct = String(a.content_type ?? "").toLowerCase();
+      return ct.startsWith("audio/") || ct === "video/mp4";
       String(a.content_type ?? "").startsWith("audio/")
-    );
+    });
   }, [assets]);
 
   const filteredImageAssets = useMemo(() => {

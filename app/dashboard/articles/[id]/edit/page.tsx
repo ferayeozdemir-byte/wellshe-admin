@@ -19,6 +19,9 @@ type AssetMiniRow = {
   content_type: string | null;
   width: number | null;
   height: number | null;
+  storage_provider: string | null;
+  storage_key: string | null;
+  public_url: string | null;
 };
 
 type TrRow = {
@@ -94,16 +97,19 @@ export default async function EditArticlePage(props: Props) {
   // Assets
   const { data: assetsData, error: asErr } = await supabase
     .from("assets")
-    .select("id,bucket,path,created_at,bytes,content_type,width,height")
+    .select(
+      "id,bucket,path,created_at,bytes,content_type,width,height,storage_provider,storage_key,public_url"
+    )
     .order("created_at", { ascending: false })
     .range(0, 4999);
 
   const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
 
   // Ses / görsel filtreleri
-  const audioAssets = assets.filter((a) =>
-    String(a.content_type ?? "").startsWith("audio/")
-  );
+  const audioAssets = assets.filter((a) => {
+    const ct = String(a.content_type ?? "").toLowerCase();
+    return ct.startsWith("audio/") || ct === "video/mp4";
+  });
 
   const imageAssetsForPicker = assets
     .filter((a) => String(a.content_type ?? "").startsWith("image/"))
@@ -298,6 +304,7 @@ export default async function EditArticlePage(props: Props) {
                 {typeof a.bytes === "number"
                   ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
                   : ""}
+                {a.storage_provider ? ` — ${a.storage_provider}` : " — supabase"}
               </option>
             ))}
           </select>
