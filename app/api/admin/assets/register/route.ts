@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// ✅ Bu endpoint sadece server’da çalışıyor, burada service_role kullanabiliriz
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Service key ile çalışan tam yetkili Supabase client
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: {
     persistSession: false,
@@ -15,11 +13,23 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { bucket, path, bytes, contentType } = body as {
+
+    const {
+      bucket,
+      path,
+      bytes,
+      contentType,
+      storageProvider,
+      storageKey,
+      publicUrl,
+    } = body as {
       bucket: string;
       path: string;
       bytes: number;
       contentType: string | null;
+      storageProvider?: string | null;
+      storageKey?: string | null;
+      publicUrl?: string | null;
     };
 
     if (!bucket || !path) {
@@ -29,25 +39,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 🔐 service_role ile çağırdığımız için RLS bu client için devre dışı
-    const { error } = await supabase.from("assets").insert({
-      bucket,
-      path,
-      bytes,
-      content_type: contentType,
-    });
+    const { data, error } = await supabase
+      .from("assets")
+      .insert({
+        bucket,
+        path,
+        bytes,
+        content_type: contentType,
+        storage_provider: storageProvider ?? "supabase",
+        storage_key: storageKey ?? path,
+        public_url: publicUrl ?? null,
+      })
+      .select("id,bucket,path,content_type,bytes,storage_provider,storage_key,public_url")
+      .single();
 
     if (error) {
       console.error("DB insert error:", error);
+
       return NextResponse.json(
         { error: "DB insert error", details: error.message },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, asset: data });
   } catch (err: any) {
     console.error(err);
+
     return NextResponse.json(
       { error: "Unexpected error", details: String(err?.message || err) },
       { status: 500 }

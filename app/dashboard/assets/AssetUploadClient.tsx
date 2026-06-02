@@ -6,10 +6,88 @@ import { uploadAsset } from "./actions";
 
 type UploadError = string | null;
 
+function isR2PlayableMedia(file: File) {
+  const ct = String(file.type || "").toLowerCase();
+  const name = String(file.name || "").toLowerCase();
+
+  return (
+    ct.startsWith("audio/") ||
+    ct === "video/mp4" ||
+    name.endsWith(".mp3") ||
+    name.endsWith(".m4a") ||
+    name.endsWith(".wav") ||
+    name.endsWith(".mp4")
+  );
+}
+
 function AssetUploadClient() {
   const router = useRouter();
   const [isUploading, setUploading] = useState(false);
   const [error, setError] = useState<UploadError>(null);
+
+  async function uploadPlayableMediaToR2(file: File) {
+    const signRes = await fetch("/api/admin/assets/r2-upload-url", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        bytes: file.size,
+      }),
+    });
+
+    const signJson = await signRes.json();
+
+    if (!signRes.ok) {
+      throw new Error(
+        signJson?.error ||
+          signJson?.details ||
+          "R2 upload URL oluşturulamadı."
+      );
+    }
+
+    const uploadRes = await fetch(signJson.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": signJson.contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+      body: file,
+    });
+
+    if (!uploadRes.ok) {
+      const text = await uploadRes.text();
+      throw new Error(`R2 upload hatası: ${uploadRes.status} ${text}`);
+    }
+
+    const registerRes = await fetch("/api/admin/assets/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        bucket: signJson.bucket,
+        path: signJson.path,
+        bytes: file.size,
+        contentType: signJson.contentType,
+        storageProvider: "r2",
+        storageKey: signJson.storageKey,
+        publicUrl: signJson.publicUrl,
+      }),
+    });
+
+    const registerJson = await registerRes.json();
+
+    if (!registerRes.ok) {
+      throw new Error(
+        registerJson?.error ||
+          registerJson?.details ||
+          "R2 dosyası yüklendi ama assets kaydı oluşturulamadı."
+      );
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -27,12 +105,17 @@ function AssetUploadClient() {
     try {
       setUploading(true);
 
-      await uploadAsset(formData);
+      if (isR2PlayableMedia(file)) {
+        await uploadPlayableMediaToR2(file);
+      } else {
+        await uploadAsset(formData);
+      }
 
       form.reset();
       router.refresh();
     } catch (err: any) {
       console.error("asset upload error", err);
+
       setError(
         err?.message ??
           "Dosya yüklenirken beklenmeyen bir hata oluştu. Lütfen tekrar dene."
