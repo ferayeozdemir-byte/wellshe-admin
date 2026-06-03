@@ -14,12 +14,7 @@ function escapeCsv(value: unknown) {
 }
 
 function toCsv(rows: ReportRow[]) {
-  const headers = [
-    "Section",
-    "Label",
-    "Value 1",
-    "Value 2",
-  ];
+  const headers = ["Bölüm", "Başlık", "Toplam / Değer", "Tekil / Açıklama"];
 
   const body = rows.map((row) => [
     row.section,
@@ -33,12 +28,19 @@ function toCsv(rows: ReportRow[]) {
     .join("\n");
 }
 
-function getFileName() {
-  const today = new Date().toISOString().slice(0, 10);
-  return `wellshe-sponsor-report-last-30-days-${today}.csv`;
+function getFileName(startDate: string, endDate: string) {
+  return `wellshe-sponsor-report-${startDate}-${endDate}.csv`;
 }
 
-export default function DownloadCsvButton({ rows }: { rows: ReportRow[] }) {
+export default function DownloadCsvButton({
+  rows,
+  startDate,
+  endDate,
+}: {
+  rows: ReportRow[];
+  startDate: string;
+  endDate: string;
+}) {
   function downloadCsv() {
     const csv = toCsv(rows);
     const blob = new Blob(["\uFEFF" + csv], {
@@ -49,7 +51,7 @@ export default function DownloadCsvButton({ rows }: { rows: ReportRow[] }) {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = getFileName();
+    link.download = getFileName(startDate, endDate);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -61,13 +63,14 @@ export default function DownloadCsvButton({ rows }: { rows: ReportRow[] }) {
     <button
       type="button"
       onClick={downloadCsv}
+      disabled={rows.length === 0}
       style={{
         padding: "10px 14px",
         borderRadius: 10,
         border: "1px solid #111",
-        background: "#111",
+        background: rows.length === 0 ? "#999" : "#111",
         color: "#fff",
-        cursor: "pointer",
+        cursor: rows.length === 0 ? "not-allowed" : "pointer",
         fontWeight: 700,
       }}
     >
