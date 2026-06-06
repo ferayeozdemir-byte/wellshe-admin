@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Asset = {
   id: string;
@@ -33,10 +33,6 @@ export default function CoverPicker({
   const [query, setQuery] = useState("");
 
   const [selectedId, setSelectedId] = useState<string>(defaultValue ?? "");
-
-  useEffect(() => {
-    setSelectedId(defaultValue ?? "");
-  }, [defaultValue]);
 
   const selected = useMemo(
     () => assets.find((a) => a.id === selectedId) ?? null,

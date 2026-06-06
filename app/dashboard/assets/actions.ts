@@ -83,18 +83,6 @@ function extFromFilename(name: string) {
   return ext;
 }
 
-function isR2PlayableMedia(file: File) {
-  const ct = String(file.type || "").toLowerCase();
-  const name = String(file.name || "").toLowerCase();
-
-  return (
-    ct.startsWith("audio/") ||
-    ct === "video/mp4" ||
-    name.endsWith(".mp4") ||
-    name.endsWith(".m4a")
-  );
-}
-
 function makePath(file: File) {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -153,56 +141,32 @@ export async function uploadAsset(formData: FormData): Promise<void> {
   const contentType = file.type || "application/octet-stream";
   const bytes = file.size;
 
-  if (isR2PlayableMedia(file)) {
-    const r2 = getR2Client();
-    const r2Bucket = getR2Bucket();
+  const r2 = getR2Client();
+  const r2Bucket = getR2Bucket();
 
-    const arrayBuffer = await file.arrayBuffer();
-    const body = Buffer.from(arrayBuffer);
+  const arrayBuffer = await file.arrayBuffer();
+  const body = Buffer.from(arrayBuffer);
 
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: r2Bucket,
-        Key: path,
-        Body: body,
-        ContentType: contentType,
-        CacheControl: "public, max-age=31536000, immutable",
-      })
-    );
+  await r2.send(
+    new PutObjectCommand({
+      Bucket: r2Bucket,
+      Key: path,
+      Body: body,
+      ContentType: contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  );
 
-    const publicUrl = `${getR2PublicBaseUrl()}/${path}`;
-
-    const { error: insErr } = await supabase.from("assets").insert({
-      bucket,
-      path,
-      content_type: contentType,
-      bytes,
-      storage_provider: "r2",
-      storage_key: path,
-      public_url: publicUrl,
-    });
-
-    if (insErr) throw new Error(insErr.message);
-
-    revalidatePath("/dashboard/assets");
-    return;
-  }
-
-  const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
-    contentType,
-    upsert: false,
-  });
-
-  if (upErr) throw new Error(upErr.message);
+  const publicUrl = `${getR2PublicBaseUrl()}/${path}`;
 
   const { error: insErr } = await supabase.from("assets").insert({
     bucket,
     path,
     content_type: contentType,
     bytes,
-    storage_provider: "supabase",
+    storage_provider: "r2",
     storage_key: path,
-    public_url: null,
+    public_url: publicUrl,
   });
 
   if (insErr) throw new Error(insErr.message);

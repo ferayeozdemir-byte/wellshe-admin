@@ -59,12 +59,15 @@ export default function AudioUploadField({
 
     setAudioPath(json.path);
     setAudioAssetId(json.assetId);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("audio upload error", err);
-    setError(
-      err?.message ??
-        "Ses dosyası yüklenirken bir hata oluştu. Lütfen tekrar dene."
-    );
+
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Ses dosyası yüklenirken bir hata oluştu. Lütfen tekrar dene.";
+
+    setError(message);
   } finally {
     setUploading(false);
   }

@@ -16,11 +16,26 @@ type AssetMiniRow = {
   content_type: string | null;
   width: number | null;
   height: number | null;
+  storage_provider: string | null;
+  storage_key: string | null;
+  public_url: string | null;
 };
 
 type Props = {
   params: { id: string } | Promise<{ id: string }>;
 };
+
+function getSupabasePublicUrl(bucket: string, path: string) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return "";
+  return `${base}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+function resolveAssetPublicUrl(asset?: AssetMiniRow | null) {
+  if (!asset) return "";
+  if (asset.public_url) return asset.public_url;
+  return getSupabasePublicUrl(asset.bucket, asset.path);
+}
 
 export default async function EditPracticePage(props: Props) {
   await requireAdmin();
@@ -39,15 +54,18 @@ export default async function EditPracticePage(props: Props) {
 
   const { data: assetsData, error: asErr } = await supabase
     .from("assets")
-    .select("id,bucket,path,created_at,bytes,content_type,width,height")
+    .select(
+      "id,bucket,path,created_at,bytes,content_type,width,height,storage_provider,storage_key,public_url"
+    )
     .order("created_at", { ascending: false })
     .range(0, 4999);
 
   const assets: AssetMiniRow[] = (assetsData ?? []) as AssetMiniRow[];
 
-  const audioAssets = assets.filter((a) =>
-    String(a.content_type ?? "").startsWith("audio/")
-  );
+  const audioAssets = assets.filter((a) => {
+    const ct = String(a.content_type ?? "").toLowerCase();
+    return ct.startsWith("audio/") || ct === "video/mp4";
+  });
 
   const imageAssetsForPicker = assets
     .filter((a) => String(a.content_type ?? "").startsWith("image/"))
@@ -57,19 +75,13 @@ export default async function EditPracticePage(props: Props) {
       path: a.path,
       content_type: a.content_type ?? null,
       bytes: a.bytes ?? null,
-      publicUrl:
-        supabase.storage.from(a.bucket).getPublicUrl(a.path).data.publicUrl,
+      publicUrl: resolveAssetPublicUrl(a),
     }));
 
   const currentCoverId = practice.cover_asset_id ?? null;
   const currentCover = assets.find((a) => a.id === currentCoverId);
 
-  const coverPreviewUrl =
-    currentCover?.bucket && currentCover?.path
-      ? supabase.storage.from(currentCover.bucket).getPublicUrl(
-          currentCover.path
-        ).data.publicUrl
-      : "";
+  const coverPreviewUrl = resolveAssetPublicUrl(currentCover);
 
   const currentAudioId = practice.audio_asset_id ?? null;
   const currentAudio = assets.find((a) => a.id === currentAudioId);
@@ -190,6 +202,9 @@ export default async function EditPracticePage(props: Props) {
               />
               <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
                 {currentCover?.path ?? ""}
+                {currentCover?.storage_provider
+                  ? ` — ${currentCover.storage_provider}`
+                  : ""}
               </div>
             </div>
           ) : null}
@@ -208,6 +223,7 @@ export default async function EditPracticePage(props: Props) {
                   {typeof a.bytes === "number"
                     ? ` (${(a.bytes / (1024 * 1024)).toFixed(2)} MB)`
                     : ""}
+                  {a.storage_provider ? ` — ${a.storage_provider}` : ""}
                 </option>
               ))}
             </select>
@@ -220,6 +236,9 @@ export default async function EditPracticePage(props: Props) {
             {currentAudio && (
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
                 Şu an bağlı ses: <b>{currentAudio.path}</b>
+                {currentAudio.storage_provider
+                  ? ` — ${currentAudio.storage_provider}`
+                  : ""}
               </div>
             )}
           </label>
@@ -305,7 +324,7 @@ export default async function EditPracticePage(props: Props) {
   );
 }
 
-const card: React.CSSProperties = {
+const card: CSSProperties = {
   border: "1px solid #e5e7eb",
   borderRadius: 14,
   padding: 16,
@@ -313,26 +332,26 @@ const card: React.CSSProperties = {
   gap: 14,
 };
 
-const sectionTitle: React.CSSProperties = {
+const sectionTitle: CSSProperties = {
   margin: 0,
   fontSize: 18,
   fontWeight: 700,
 };
 
-const grid2: React.CSSProperties = {
+const grid2: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: 14,
 };
 
-const label: React.CSSProperties = {
+const label: CSSProperties = {
   display: "grid",
   gap: 8,
   fontSize: 14,
   fontWeight: 600,
 };
 
-const input: React.CSSProperties = {
+const input: CSSProperties = {
   width: "100%",
   padding: "10px 12px",
   borderRadius: 10,
@@ -340,7 +359,7 @@ const input: React.CSSProperties = {
   fontSize: 14,
 };
 
-const textarea: React.CSSProperties = {
+const textarea: CSSProperties = {
   width: "100%",
   minHeight: 120,
   padding: "10px 12px",
@@ -350,7 +369,7 @@ const textarea: React.CSSProperties = {
   resize: "vertical",
 };
 
-const btnPrimary: React.CSSProperties = {
+const btnPrimary: CSSProperties = {
   padding: "10px 14px",
   borderRadius: 10,
   border: "1px solid #111",
@@ -360,7 +379,7 @@ const btnPrimary: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const btnSecondary: React.CSSProperties = {
+const btnSecondary: CSSProperties = {
   padding: "10px 14px",
   borderRadius: 10,
   border: "1px solid #ddd",

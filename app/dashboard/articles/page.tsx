@@ -1,16 +1,43 @@
 // app/dashboard/articles/page.tsx
-import DeleteButton from "./DeleteButton";
 import Link from "next/link";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { createArticle } from "./actions";
+import DeleteButton from "./DeleteButton";
+
+type ArticleTranslationRow = {
+  lang: string | null;
+  title: string | null;
+};
+
+type CategoryJoinRow = {
+  id: string;
+  title_tr: string | null;
+};
+
+type ArticleRow = {
+  id: string;
+  status: string;
+  created_at: string | null;
+  category_id: string | null;
+  categories: CategoryJoinRow | CategoryJoinRow[] | null;
+  article_translations: ArticleTranslationRow[] | null;
+};
+
+function pickCategoryTitle(
+  categories: CategoryJoinRow | CategoryJoinRow[] | null
+) {
+  if (!categories) return null;
+  const category = Array.isArray(categories) ? categories[0] : categories;
+  return category?.title_tr ?? null;
+}
 
 export default async function ArticlesPage() {
   await requireAdmin();
 
   const supabase = await createClient();
 
-  // TR başlığı da gelsin diye translations join
   const { data: rows, error } = await supabase
     .from("articles")
     .select(
@@ -25,19 +52,18 @@ export default async function ArticlesPage() {
     )
     .order("created_at", { ascending: false });
 
-  // TR title seç
-  const articles =
-    (rows ?? []).map((r: any) => {
-      const tr = (r.article_translations ?? []).find((t: any) => t.lang === "tr");
-      return {
-        id: r.id as string,
-        status: r.status as string,
-        created_at: r.created_at as string | null,
-        category_id: r.category_id as string | null,
-        category_title_tr: r.categories?.title_tr ?? null,
-        title_tr: tr?.title ?? "(başlık yok)",
-      };
-    }) ?? [];
+  const articles = ((rows ?? []) as ArticleRow[]).map((r) => {
+    const tr = (r.article_translations ?? []).find((t) => t.lang === "tr");
+
+    return {
+      id: r.id,
+      status: r.status,
+      created_at: r.created_at,
+      category_id: r.category_id,
+      category_title_tr: pickCategoryTitle(r.categories),
+      title_tr: tr?.title ?? "(başlık yok)",
+    };
+  });
 
   return (
     <div style={{ padding: 24 }}>
@@ -83,7 +109,9 @@ export default async function ArticlesPage() {
                 <td style={td}>{a.category_title_tr ?? a.category_id ?? "-"}</td>
 
                 <td style={td}>
-                  {a.created_at ? new Date(a.created_at).toLocaleString("tr-TR") : "-"}
+                  {a.created_at
+                    ? new Date(a.created_at).toLocaleString("tr-TR")
+                    : "-"}
                 </td>
 
                 <td style={td}>
@@ -143,16 +171,6 @@ const btn: React.CSSProperties = {
   textDecoration: "none",
   display: "inline-block",
   color: "#111",
-};
-
-const btnDanger: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 10,
-  border: "1px solid #e33",
-  background: "#fff",
-  color: "#e33",
-  cursor: "pointer",
-  fontWeight: 700,
 };
 
 function badge(status: string): React.CSSProperties {

@@ -149,12 +149,12 @@ export async function POST(req: NextRequest) {
       bytes: data.bytes,
       storageProvider: data.storage_provider,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("R2 audio upload error:", err);
     return NextResponse.json(
       {
         error: "Ses dosyası yüklenirken beklenmeyen bir hata oluştu.",
-        details: String(err?.message || err),
+        details: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }
     );

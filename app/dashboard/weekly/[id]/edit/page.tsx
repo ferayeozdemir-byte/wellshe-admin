@@ -1,8 +1,23 @@
 // app/dashboard/weekly/[id]/edit/page.tsx
 import Link from "next/link";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { updateWeeklyItem } from "../../actions";
+
+type Props = {
+  params: { id: string } | Promise<{ id: string }>;
+};
+
+type WeeklyItemRow = {
+  id: string;
+  category: string;
+  week_label: string;
+  teaser: string;
+  title: string;
+  description: string;
+  status: string | null;
+};
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -10,17 +25,11 @@ function isUuid(v: string) {
   );
 }
 
-export default async function WeeklyEditPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function WeeklyEditPage({ params }: Props) {
   await requireAdmin();
 
-  // Next bazen params’i farklı şekilde verebiliyor diye güvenli alıyoruz
-  const p: any = await Promise.resolve(params as any);
-  const id =
-    typeof p?.id === "string" ? p.id : Array.isArray(p?.id) ? p.id[0] : undefined;
+  const resolvedParams = await Promise.resolve(params);
+  const id = resolvedParams.id;
 
   if (!id || !isUuid(id)) {
     return (
@@ -35,11 +44,14 @@ export default async function WeeklyEditPage({
   }
 
   const supabase = await createClient();
-  const { data: row, error } = await supabase
+
+  const { data, error } = await supabase
     .from("weekly_items")
     .select("id, category, week_label, teaser, title, description, status")
     .eq("id", id)
     .single();
+
+  const row = data as WeeklyItemRow | null;
 
   if (error || !row) {
     return (
@@ -62,7 +74,6 @@ export default async function WeeklyEditPage({
         </Link>
       </div>
 
-      {/* ✅ Form TEK parça: bütün inputlar formun İÇİNDE */}
       <form action={updateWeeklyItem} style={card}>
         <input type="hidden" name="id" value={row.id} />
 

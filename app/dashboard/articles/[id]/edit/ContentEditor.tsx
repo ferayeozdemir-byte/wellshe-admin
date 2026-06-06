@@ -16,12 +16,18 @@ export type AssetMiniRow = {
   content_type: string | null;
   width: number | null;
   height: number | null;
+  storage_provider?: string | null;
+  storage_key?: string | null;
+  public_url?: string | null;
 };
 
-function publicAssetUrl(bucket: string, path: string) {
+function publicAssetUrl(asset: AssetMiniRow) {
+  if (asset.public_url) return asset.public_url;
+
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base) return "";
-  return `${base}/storage/v1/object/public/${bucket}/${path}`;
+
+  return `${base}/storage/v1/object/public/${asset.bucket}/${asset.path}`;
 }
 
 const AudioBlock = Node.create({
@@ -95,7 +101,6 @@ export default function ContentEditor({
     return (assets ?? []).filter((a) => {
       const ct = String(a.content_type ?? "").toLowerCase();
       return ct.startsWith("audio/") || ct === "video/mp4";
-      String(a.content_type ?? "").startsWith("audio/")
     });
   }, [assets]);
 
@@ -175,7 +180,7 @@ export default function ContentEditor({
   function insertImageFromAsset(asset: AssetMiniRow) {
     if (!editor) return;
 
-    const url = publicAssetUrl(asset.bucket, asset.path);
+    const url = publicAssetUrl(asset);
     if (!url) {
       alert("NEXT_PUBLIC_SUPABASE_URL tanımlı değil. Vercel Env kontrol edin.");
       return;
@@ -409,7 +414,7 @@ export default function ContentEditor({
 
             <div style={assetGrid}>
               {filteredImageAssets.map((a) => {
-                const url = publicAssetUrl(a.bucket, a.path);
+                const url = publicAssetUrl(a);
                 const isBig = bigIds.has(a.id);
                 const isHuge = hugeDimIds.has(a.id);
 
@@ -460,6 +465,7 @@ export default function ContentEditor({
                     </div>
 
                     {url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={url}
                         alt=""

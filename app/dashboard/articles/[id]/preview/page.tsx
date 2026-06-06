@@ -1,38 +1,66 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function ArticlePreviewPage({
-  params,
-}: {
+type Props = {
   params: { id: string } | Promise<{ id: string }>;
-}) {
+};
+
+type CategoryJoinRow = {
+  title_tr: string | null;
+};
+
+type ArticlePreviewRow = {
+  id: string;
+  status: string;
+  category_id: string | null;
+  categories: CategoryJoinRow | CategoryJoinRow[] | null;
+};
+
+type ArticleTranslationPreviewRow = {
+  title: string | null;
+  summary: string | null;
+  content_html: string | null;
+};
+
+function pickCategoryTitle(
+  categories: CategoryJoinRow | CategoryJoinRow[] | null
+) {
+  if (!categories) return null;
+  const category = Array.isArray(categories) ? categories[0] : categories;
+  return category?.title_tr ?? null;
+}
+
+export default async function ArticlePreviewPage({ params }: Props) {
   const { id } = await Promise.resolve(params);
 
   await requireAdmin();
   const supabase = await createClient();
 
-  // ✅ categories join ile title_tr çekiyoruz
-  const { data: article, error: aErr } = await supabase
+  const { data: articleData, error: aErr } = await supabase
     .from("articles")
     .select("id, status, category_id, categories(title_tr)")
     .eq("id", id)
     .single();
 
-  if (aErr || !article) notFound();
+  if (aErr || !articleData) notFound();
 
-  const { data: tr, error: tErr } = await supabase
+  const { data: trData, error: tErr } = await supabase
     .from("article_translations")
     .select("title, summary, content_html")
     .eq("article_id", id)
     .eq("lang", "tr")
     .single();
 
-  if (tErr || !tr) notFound();
+  if (tErr || !trData) notFound();
+
+  const article = articleData as ArticlePreviewRow;
+  const tr = trData as ArticleTranslationPreviewRow;
 
   const categoryLabel =
-    (article as any).categories?.title_tr ??
+    pickCategoryTitle(article.categories) ??
     (article.category_id ? String(article.category_id) : "-");
 
   return (

@@ -1,22 +1,42 @@
 // app/dashboard/weekly/page.tsx
 import Link from "next/link";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { createWeeklyItem } from "./actions";
 import DeleteButton from "./DeleteButton";
 
+type WeeklyRow = {
+  id: string;
+  category: string;
+  week_label: string | null;
+  teaser: string | null;
+  status: string;
+  created_at: string | null;
+};
+
+type WeeklySearchParams = {
+  updated?: string;
+  created?: string;
+  deleted?: string;
+};
+
 export default async function WeeklyPage({
   searchParams,
 }: {
-  searchParams?: { updated?: string; created?: string; deleted?: string };
+  searchParams?: WeeklySearchParams | Promise<WeeklySearchParams>;
 }) {
   await requireAdmin();
   const supabase = await createClient();
+
+  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
 
   const { data: rows, error } = await supabase
     .from("weekly_items")
     .select("id, category, week_label, teaser, status, created_at")
     .order("created_at", { ascending: false });
+
+  const weeklyRows = (rows ?? []) as WeeklyRow[];
 
   return (
     <div style={{ padding: 24, display: "grid", gap: 16 }}>
@@ -27,14 +47,15 @@ export default async function WeeklyPage({
         </Link>
       </div>
 
-      {/* ✅ Başarı mesajları */}
-      {searchParams?.created === "1" && (
+      {resolvedSearchParams.created === "1" && (
         <p style={{ color: "green", fontWeight: 700, margin: 0 }}>Eklendi ✅</p>
       )}
-      {searchParams?.updated === "1" && (
-        <p style={{ color: "green", fontWeight: 700, margin: 0 }}>Kaydedildi ✅</p>
+      {resolvedSearchParams.updated === "1" && (
+        <p style={{ color: "green", fontWeight: 700, margin: 0 }}>
+          Kaydedildi ✅
+        </p>
       )}
-      {searchParams?.deleted === "1" && (
+      {resolvedSearchParams.deleted === "1" && (
         <p style={{ color: "green", fontWeight: 700, margin: 0 }}>Silindi ✅</p>
       )}
 
@@ -103,20 +124,23 @@ export default async function WeeklyPage({
               <th style={th}>Actions</th>
             </tr>
           </thead>
+
           <tbody>
-            {(rows ?? []).map((r: any) => (
+            {weeklyRows.map((r) => (
               <tr key={r.id}>
                 <td style={td}>
-                  <div style={{ fontWeight: 700 }}>{r.teaser}</div>
+                  <div style={{ fontWeight: 700 }}>{r.teaser ?? "-"}</div>
                   <div style={{ fontSize: 12, opacity: 0.75 }}>{r.id}</div>
                 </td>
                 <td style={td}>{r.category}</td>
-                <td style={td}>{r.week_label}</td>
+                <td style={td}>{r.week_label ?? "-"}</td>
                 <td style={td}>
                   <span style={badge(r.status)}>{r.status}</span>
                 </td>
                 <td style={td}>
-                  {r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-"}
+                  {r.created_at
+                    ? new Date(r.created_at).toLocaleString("tr-TR")
+                    : "-"}
                 </td>
                 <td style={td}>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -129,7 +153,7 @@ export default async function WeeklyPage({
               </tr>
             ))}
 
-            {(rows ?? []).length === 0 && (
+            {weeklyRows.length === 0 && (
               <tr>
                 <td style={td} colSpan={6}>
                   Henüz weekly öneri yok.
@@ -150,7 +174,11 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
-const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, paddingTop: 8 };
+const label: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  paddingTop: 8,
+};
 
 const input: React.CSSProperties = {
   padding: 10,

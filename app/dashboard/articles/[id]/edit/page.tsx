@@ -37,9 +37,21 @@ type TrRow = {
 type Props = {
   params: { id: string } | Promise<{ id: string }>;
   searchParams?:
-    | { [key: string]: string | string[] | undefined }
-    | Promise<{ [key: string]: string | string[] | undefined }>;
+  | { [key: string]: string | string[] | undefined }
+  | Promise<{ [key: string]: string | string[] | undefined }>;
 };
+
+function getSupabasePublicUrl(bucket: string, path: string) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return "";
+  return `${base}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+function resolveAssetPublicUrl(asset?: AssetMiniRow | null) {
+  if (!asset) return "";
+  if (asset.public_url) return asset.public_url;
+  return getSupabasePublicUrl(asset.bucket, asset.path);
+}
 
 export default async function EditArticlePage(props: Props) {
   await requireAdmin();
@@ -119,8 +131,7 @@ export default async function EditArticlePage(props: Props) {
       path: a.path,
       content_type: a.content_type ?? null,
       bytes: a.bytes ?? null,
-      publicUrl:
-        supabase.storage.from(a.bucket).getPublicUrl(a.path).data.publicUrl,
+      publicUrl: resolveAssetPublicUrl(a),
     }));
 
   const trData = {
@@ -144,12 +155,7 @@ export default async function EditArticlePage(props: Props) {
   const currentCoverId = coverDefaultValue || null;
   const currentCover = assets.find((a) => a.id === currentCoverId);
 
-  const coverPreviewUrl =
-    currentCover?.bucket && currentCover?.path
-      ? supabase.storage.from(currentCover.bucket).getPublicUrl(
-          currentCover.path
-        ).data.publicUrl
-      : "";
+  const coverPreviewUrl = resolveAssetPublicUrl(currentCover);
 
   // Mevcut audio
   const currentAudioId = audioDefaultValue || null;
@@ -361,6 +367,9 @@ export default async function EditArticlePage(props: Props) {
               content_type: a.content_type ?? null,
               width: a.width ?? null,
               height: a.height ?? null,
+              storage_provider: a.storage_provider ?? null,
+              storage_key: a.storage_key ?? null,
+              public_url: a.public_url ?? null,
             }))}
           />
         </label>

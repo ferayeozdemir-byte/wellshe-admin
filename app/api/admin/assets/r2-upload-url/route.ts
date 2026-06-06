@@ -123,13 +123,13 @@ export async function POST(req: NextRequest) {
       contentType,
       bytes,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("R2 signed upload URL error:", err);
 
     return NextResponse.json(
       {
         error: "R2 upload URL oluşturulamadı.",
-        details: String(err?.message || err),
+        details: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }
     );

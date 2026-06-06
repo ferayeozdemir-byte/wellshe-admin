@@ -1,12 +1,19 @@
 "use server";
 
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 /* ---------- helpers ---------- */
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 function slugifyTR(input: string) {
   const s = (input ?? "").trim().toLowerCase();
@@ -65,20 +72,77 @@ function getAdminSupabase() {
     process.env.SUPABASE_SERVICE_KEY ||
     "";
 
-  if (!url) throw new Error("SUPABASE URL env eksik (Vercel).");
-  if (!serviceKey) throw new Error("SERVICE ROLE KEY env eksik (Vercel).");
+  if (!url) throw new Error("SUPABASE URL env eksik.");
+  if (!serviceKey) throw new Error("SERVICE ROLE KEY env eksik.");
 
   return createAdminClient(url, serviceKey, {
     auth: { persistSession: false },
   });
 }
 
+function getR2Client() {
+  const endpoint = process.env.R2_ENDPOINT;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+
+  if (!endpoint) throw new Error("R2_ENDPOINT eksik.");
+  if (!accessKeyId) throw new Error("R2_ACCESS_KEY_ID eksik.");
+  if (!secretAccessKey) throw new Error("R2_SECRET_ACCESS_KEY eksik.");
+
+  return new S3Client({
+    region: "auto",
+    endpoint,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
+}
+
+function getR2Bucket() {
+  return process.env.R2_BUCKET || "wellshe-media";
+}
+
+function getR2PublicBaseUrl() {
+  return (process.env.R2_PUBLIC_BASE_URL || "https://media.wellshe.app").replace(
+    /\/$/,
+    ""
+  );
+}
+
 function extFromFilename(name: string) {
   const idx = name.lastIndexOf(".");
   if (idx === -1) return "";
-  const ext = name.slice(idx).toLowerCase();
+  const ext = name.slice(idx).toLowerCase().replace(/[^.a-z0-9]/g, "");
   if (ext.length > 10) return "";
   return ext;
+}
+
+async function uploadFileToR2({
+  file,
+  path,
+  contentType,
+}: {
+  file: File;
+  path: string;
+  contentType: string;
+}) {
+  const r2 = getR2Client();
+
+  const arrayBuffer = await file.arrayBuffer();
+  const body = Buffer.from(arrayBuffer);
+
+  await r2.send(
+    new PutObjectCommand({
+      Bucket: getR2Bucket(),
+      Key: path,
+      Body: body,
+      ContentType: contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  );
+
+  return `${getR2PublicBaseUrl()}/${path}`;
 }
 
 /* ---------- main actions ---------- */
@@ -142,7 +206,6 @@ export async function updateArticleTRNoRedirect(formData: FormData) {
     }
   }
 
-  // 1) articles update
   const { error: aErr } = await supabase
     .from("articles")
     .update({ status, category_id, cover_asset_id })
@@ -150,7 +213,6 @@ export async function updateArticleTRNoRedirect(formData: FormData) {
 
   if (aErr) throw new Error(aErr.message);
 
-  // 2) TR translation upsert
   const { error: tErr } = await supabase.from("article_translations").upsert(
     {
       article_id: id,
@@ -195,6 +257,8 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
   const article_id = String(formData.get("article_id") || "").trim();
   if (!article_id) throw new Error("article_id eksik");
 
+  let redirectUrl = `/dashboard/articles/${article_id}/edit`;
+
   try {
     const admin = getAdminSupabase();
 
@@ -203,9 +267,15 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
       throw new Error("Dosya seçilmedi.");
     }
 
-    const maxBytes = 2 * 1024 * 1024; // 2MB
+    const maxBytes = 2 * 1024 * 1024;
     if (file.size > maxBytes) {
       throw new Error("Kapak görseli 2 MB'tan büyük. Lütfen görseli küçültün.");
+    }
+
+    const contentType = file.type || "application/octet-stream";
+
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      throw new Error("Kapak için sadece görsel dosyası yükleyebilirsin.");
     }
 
     const bucket = "media";
@@ -222,21 +292,22 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
 
     const path = `covers/${yyyy}-${mm}/${fileId}${ext}`;
 
-    const { error: upErr } = await admin.storage
-      .from(bucket)
-      .upload(path, file, {
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-    if (upErr) throw new Error(upErr.message);
+    const publicUrl = await uploadFileToR2({
+      file,
+      path,
+      contentType,
+    });
 
     const { data: inserted, error: insErr } = await admin
       .from("assets")
       .insert({
         bucket,
         path,
-        content_type: file.type || null,
+        content_type: contentType,
         bytes: file.size,
+        storage_provider: "r2",
+        storage_key: path,
+        public_url: publicUrl,
       })
       .select("id")
       .single();
@@ -254,18 +325,19 @@ export async function uploadCoverForArticle(formData: FormData): Promise<void> {
     revalidatePath(`/dashboard/articles/${article_id}/edit`);
     revalidatePath(`/dashboard/articles/${article_id}/preview`);
     revalidatePath("/dashboard/articles");
+    revalidatePath("/dashboard/assets");
+  } catch (error: unknown) {
+    const msg = getErrorMessage(
+      error,
+      "Kapak upload sırasında bir hata oluştu."
+    );
 
-    redirect(`/dashboard/articles/${article_id}/edit`);
-  } catch (e: any) {
-    const msg = String(
-      e?.message ?? "Kapak upload sırasında bir hata oluştu."
-    );
-    redirect(
-      `/dashboard/articles/${article_id}/edit?coverError=${encodeURIComponent(
-        msg
-      )}`
-    );
+    redirectUrl = `/dashboard/articles/${article_id}/edit?coverError=${encodeURIComponent(
+      msg
+    )}`;
   }
+
+  redirect(redirectUrl);
 }
 
 /* ---------- audio upload ---------- */
@@ -278,6 +350,8 @@ export async function uploadAudioForArticle(
   const article_id = String(formData.get("article_id") || "").trim();
   if (!article_id) throw new Error("article_id eksik");
 
+  let redirectUrl = `/dashboard/articles/${article_id}/edit`;
+
   try {
     const admin = getAdminSupabase();
 
@@ -286,7 +360,7 @@ export async function uploadAudioForArticle(
       throw new Error("Ses dosyası seçilmedi.");
     }
 
-    const maxBytes = 20 * 1024 * 1024; // 20MB
+    const maxBytes = 20 * 1024 * 1024;
     if (file.size > maxBytes) {
       throw new Error("Ses dosyası 20 MB'tan büyük. Lütfen küçültün.");
     }
@@ -303,8 +377,7 @@ export async function uploadAudioForArticle(
       rawType === "" || rawType === "application/octet-stream";
 
     const isMp3Ext = ext === ".mp3";
-    const isMpegExt =
-      ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
+    const isMpegExt = ext === ".mpeg" || ext === ".mpg" || ext === ".mpga";
 
     if (isAudioByType) {
       contentType = rawType;
@@ -323,6 +396,7 @@ export async function uploadAudioForArticle(
     }
 
     const bucket = "media";
+
     const now = new Date();
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -334,13 +408,11 @@ export async function uploadAudioForArticle(
 
     const path = `audios/${yyyy}-${mm}/${fileId}${ext}`;
 
-    const { error: upErr } = await admin.storage
-      .from(bucket)
-      .upload(path, file, {
-        contentType,
-        upsert: false,
-      });
-    if (upErr) throw new Error(upErr.message);
+    const publicUrl = await uploadFileToR2({
+      file,
+      path,
+      contentType,
+    });
 
     const { data: inserted, error: insErr } = await admin
       .from("assets")
@@ -349,6 +421,9 @@ export async function uploadAudioForArticle(
         path,
         content_type: contentType,
         bytes: file.size,
+        storage_provider: "r2",
+        storage_key: path,
+        public_url: publicUrl,
       })
       .select("id")
       .single();
@@ -368,16 +443,17 @@ export async function uploadAudioForArticle(
     revalidatePath(`/dashboard/articles/${article_id}/edit`);
     revalidatePath(`/dashboard/articles/${article_id}/preview`);
     revalidatePath("/dashboard/articles");
+    revalidatePath("/dashboard/assets");
+  } catch (error: unknown) {
+    const msg = getErrorMessage(
+      error,
+      "Ses upload sırasında bir hata oluştu."
+    );
 
-    redirect(`/dashboard/articles/${article_id}/edit`);
-  } catch (e: any) {
-    const msg = String(
-      e?.message ?? "Ses upload sırasında bir hata oluştu."
-    );
-    redirect(
-      `/dashboard/articles/${article_id}/edit?audioError=${encodeURIComponent(
-        msg
-      )}`
-    );
+    redirectUrl = `/dashboard/articles/${article_id}/edit?audioError=${encodeURIComponent(
+      msg
+    )}`;
   }
+
+  redirect(redirectUrl);
 }

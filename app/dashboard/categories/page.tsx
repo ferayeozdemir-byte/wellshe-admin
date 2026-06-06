@@ -2,12 +2,18 @@
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createCategory, deleteCategory } from "./actions";
 
+type CategoryRow = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+};
+
 export default async function CategoriesPage() {
   const { supabase } = await requireAdmin();
 
   const { data: categories, error } = await supabase
     .from("categories")
-    .select("*")
+    .select("id,name,slug")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -19,11 +25,12 @@ export default async function CategoriesPage() {
     );
   }
 
+  const rows = (categories ?? []) as CategoryRow[];
+
   return (
     <div style={{ padding: 24, display: "grid", gap: 16 }}>
       <h2>Categories</h2>
 
-      {/* Ekleme formu (server action) */}
       <form action={createCategory} style={{ display: "flex", gap: 8 }}>
         <input
           name="name"
@@ -42,9 +49,8 @@ export default async function CategoriesPage() {
         </button>
       </form>
 
-      {/* Liste */}
       <div style={{ display: "grid", gap: 8 }}>
-        {(categories ?? []).map((c: any) => (
+        {rows.map((c) => (
           <div
             key={c.id}
             style={{
@@ -58,8 +64,8 @@ export default async function CategoriesPage() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 600 }}>{c.name}</div>
-              <div style={{ opacity: 0.7, fontSize: 13 }}>{c.slug}</div>
+              <div style={{ fontWeight: 600 }}>{c.name ?? "-"}</div>
+              <div style={{ opacity: 0.7, fontSize: 13 }}>{c.slug ?? "-"}</div>
             </div>
 
             <form action={deleteCategory}>

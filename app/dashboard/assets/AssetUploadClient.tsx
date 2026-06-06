@@ -43,8 +43,8 @@ function AssetUploadClient() {
     if (!signRes.ok) {
       throw new Error(
         signJson?.error ||
-          signJson?.details ||
-          "R2 upload URL oluşturulamadı."
+        signJson?.details ||
+        "R2 upload URL oluşturulamadı."
       );
     }
 
@@ -83,8 +83,8 @@ function AssetUploadClient() {
     if (!registerRes.ok) {
       throw new Error(
         registerJson?.error ||
-          registerJson?.details ||
-          "R2 dosyası yüklendi ama assets kaydı oluşturulamadı."
+        registerJson?.details ||
+        "R2 dosyası yüklendi ama assets kaydı oluşturulamadı."
       );
     }
   }
@@ -113,13 +113,15 @@ function AssetUploadClient() {
 
       form.reset();
       router.refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("asset upload error", err);
 
-      setError(
-        err?.message ??
-          "Dosya yüklenirken beklenmeyen bir hata oluştu. Lütfen tekrar dene."
-      );
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Dosya yüklenirken beklenmeyen bir hata oluştu. Lütfen tekrar dene.";
+
+      setError(message);
     } finally {
       setUploading(false);
     }

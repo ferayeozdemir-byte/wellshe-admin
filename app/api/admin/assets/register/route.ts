@@ -63,11 +63,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, asset: data });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
 
+    const details = err instanceof Error ? err.message : String(err);
+
     return NextResponse.json(
-      { error: "Unexpected error", details: String(err?.message || err) },
+      { error: "Unexpected error", details },
       { status: 500 }
     );
   }
