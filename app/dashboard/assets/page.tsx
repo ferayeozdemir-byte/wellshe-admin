@@ -48,14 +48,30 @@ export default async function AssetsPage(props: Props) {
   const kind = getQueryParam(resolvedSearchParams, "kind");
   const returnToRaw = getQueryParam(resolvedSearchParams, "return_to");
   const returnTo = returnToRaw ? decodeURIComponent(returnToRaw) : null;
+  const q = getQueryParam(resolvedSearchParams, "q")?.trim() ?? "";
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("assets")
     .select(
       "id,bucket,path,created_at,bytes,content_type,width,height,storage_provider,storage_key,public_url"
     )
     .order("created_at", { ascending: false })
     .limit(200);
+
+  if (q) {
+    const safeQ = q.replaceAll(",", " ");
+    query = query.or(
+      [
+        `path.ilike.%${safeQ}%`,
+        `content_type.ilike.%${safeQ}%`,
+        `storage_provider.ilike.%${safeQ}%`,
+        `storage_key.ilike.%${safeQ}%`,
+        `public_url.ilike.%${safeQ}%`,
+      ].join(",")
+    );
+  }
+
+  const { data, error } = await query;
 
   let assets: AssetRow[] = (data ?? []) as AssetRow[];
 
@@ -114,6 +130,56 @@ export default async function AssetsPage(props: Props) {
         </div>
       </div>
 
+      <form
+        method="GET"
+        style={{
+          marginTop: 16,
+          marginBottom: 16,
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        {mode && <input type="hidden" name="mode" value={mode} />}
+        {kind && <input type="hidden" name="kind" value={kind} />}
+        {returnToRaw && <input type="hidden" name="return_to" value={returnToRaw} />}
+
+        <input
+          name="q"
+          defaultValue={q}
+          placeholder="Asset ara: dosya adı, uploads/..., r2, mp3, görsel..."
+          style={{
+            minWidth: 360,
+            maxWidth: "100%",
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #ddd",
+            fontSize: 14,
+          }}
+        />
+
+        <button type="submit" style={btn}>
+          Ara
+        </button>
+
+        {q && (
+          <Link
+            href={
+              isPickMode && kind && returnToRaw
+                ? `/dashboard/assets?mode=${mode}&kind=${kind}&return_to=${encodeURIComponent(returnToRaw)}`
+                : "/dashboard/assets"
+            }
+            style={btn}
+          >
+            Temizle
+          </Link>
+        )}
+
+        <span style={{ fontSize: 12, opacity: 0.7 }}>
+          {assets.length} sonuç gösteriliyor
+        </span>
+      </form>
       {error && <p style={{ color: "crimson" }}>DB Error: {error.message}</p>}
 
       <div style={{ marginTop: 16, overflowX: "auto" }}>
@@ -125,6 +191,7 @@ export default async function AssetsPage(props: Props) {
               <th style={th}>Size</th>
               <th style={th}>Created</th>
               <th style={th}>Provider</th>
+              <th style={th}>URL</th>
               {isPickMode && <th style={th}>Select</th>}
               {!isPickMode && <th style={th}>Sil</th>}
             </tr>
@@ -139,6 +206,8 @@ export default async function AssetsPage(props: Props) {
 
               const typeLabel = a.content_type ?? "-";
               const providerLabel = a.storage_provider ?? "supabase";
+              const fileName = a.path.split("/").pop() ?? a.path;
+              const assetUrl = a.public_url;
 
               let pickHref: string | null = null;
 
@@ -157,11 +226,21 @@ export default async function AssetsPage(props: Props) {
               return (
                 <tr key={a.id}>
                   <td style={td}>
-                    <div style={{ fontWeight: 700 }}>{a.path}</div>
+                    <div style={{ fontWeight: 800 }}>{fileName}</div>
                     <div
                       style={{
                         fontSize: 11,
-                        opacity: 0.7,
+                        opacity: 0.75,
+                        marginTop: 4,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {a.path}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.55,
                         marginTop: 4,
                       }}
                     >
@@ -188,6 +267,21 @@ export default async function AssetsPage(props: Props) {
                     >
                       {providerLabel}
                     </span>
+                  </td>
+
+                  <td style={td}>
+                    {assetUrl ? (
+                      <a
+                        href={assetUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={btn}
+                      >
+                        Aç
+                      </a>
+                    ) : (
+                      <span style={{ opacity: 0.55 }}>URL yok</span>
+                    )}
                   </td>
 
                   {isPickMode && (
@@ -218,7 +312,7 @@ export default async function AssetsPage(props: Props) {
 
             {assets.length === 0 && (
               <tr>
-                <td style={td} colSpan={6}>
+                <td style={td} colSpan={7}>
                   Henüz asset yok.
                 </td>
               </tr>

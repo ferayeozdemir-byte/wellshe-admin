@@ -1,11 +1,8 @@
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import {
-  createAnnouncement,
-  deleteAnnouncement,
-  updateAnnouncement,
-} from "./actions";
+import { createAnnouncement, updateAnnouncement } from "./actions";
+import DeleteAnnouncementForm from "./DeleteAnnouncementForm";
 
 type AnnouncementStatus = "draft" | "published" | "archived";
 
@@ -278,12 +275,10 @@ export default async function AnnouncementsPage() {
                 </div>
               </form>
 
-              <form action={deleteAnnouncement} style={{ marginTop: 10 }}>
-                <input type="hidden" name="id" value={announcement.id} />
-                <button type="submit" style={dangerButton}>
-                  Sil
-                </button>
-              </form>
+              <DeleteAnnouncementForm
+                id={announcement.id}
+                title={announcement.title}
+              />
             </div>
           ))
         )}
@@ -365,16 +360,6 @@ const primaryButton: CSSProperties = {
   border: "1px solid #111",
   background: "#111",
   color: "#fff",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const dangerButton: CSSProperties = {
-  border: "1px solid #D94B4B",
-  background: "#FFF3F3",
-  color: "#B42323",
   borderRadius: 10,
   padding: "10px 14px",
   fontWeight: 800,
