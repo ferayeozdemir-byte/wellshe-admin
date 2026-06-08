@@ -182,7 +182,7 @@ function formatLabel(label: string) {
 function getValue2Title(section: string) {
   if (section === "Genel Özet") return "Açıklama";
   if (section === "Altyapı Özeti") return "Açıklama";
-  return "Tekil / Not";
+  return "Tekil install_id / Not";
 }
 
 function getSectionBaseSortOrder(section: string) {
@@ -273,11 +273,9 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       </div>
 
       <p style={{ marginTop: 12, maxWidth: 860, lineHeight: 1.6, opacity: 0.8 }}>
-        Bu rapor seçilen tarih aralığına göre Supabase event ölçüm sisteminden
-        otomatik hesaplanır. Toplam indirme verisi App Store Connect ve Google
-        Play Console kaynaklı manuel metrik olarak gösterilir. Yeni süre ve
-        pratik verileri, mobil güncelleme kullanıcılara ulaştıktan sonra
-        dolmaya başlar.
+        Bu rapor, seçilen tarih aralığına göre WellShe içindeki event ölçüm sisteminden otomatik hesaplanır. 
+        Tekil değerler, gerçek kişi sayısı değil; install_id bazlı kurulum sinyali olarak değerlendirilmelidir. 
+        Yeni süre ve pratik verileri, mobil güncelleme kullanıcılara ulaştıktan sonra dolmaya başlar.
       </p>
 
       <section style={filterCard}>
