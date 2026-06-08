@@ -28,6 +28,28 @@ function extFromFilename(filename: string) {
   return ext;
 }
 
+function safeBaseNameFromFilename(filename: string) {
+  const withoutExt = filename.replace(/\.[^/.]+$/, "");
+
+  const normalized = withoutExt
+    .toLowerCase()
+    .replaceAll("ı", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const slug = normalized
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return slug || "audio";
+}
+
 function isAllowedMedia(filename: string, contentType: string) {
   const name = filename.toLowerCase();
   const ct = contentType.toLowerCase();
@@ -98,8 +120,9 @@ export async function POST(req: NextRequest) {
 
     const ext = extFromFilename(filename);
     const id = crypto.randomUUID();
+    const safeBaseName = safeBaseNameFromFilename(filename);
 
-    const storageKey = `audios/${yyyy}-${mm}/${id}${ext}`;
+    const storageKey = `audios/${yyyy}-${mm}/${id.slice(0, 8)}-${safeBaseName}${ext}`;
     const publicUrl = `${r2PublicBaseUrl.replace(/\/$/, "")}/${storageKey}`;
 
     const command = new PutObjectCommand({
