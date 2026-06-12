@@ -18,17 +18,49 @@ type AnnouncementRow = {
   updated_at: string;
 };
 
-function formatDateTimeLocal(value: string | null) {
-  if (!value) return "";
+const ADMIN_TIME_ZONE = "Europe/Istanbul";
+
+function getIstanbulDateTimeParts(value: string | null) {
+  if (!value) return null;
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) return null;
 
-  const pad = (n: number) => String(n).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ADMIN_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
 
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value;
+
+  const year = get("year");
+  const month = get("month");
+  const day = get("day");
+  const hour = get("hour");
+  const minute = get("minute");
+
+  if (!year || !month || !day || !hour || !minute) return null;
+
+  return {
+    year,
+    month,
+    day,
+    hour: hour === "24" ? "00" : hour,
+    minute,
+  };
+}
+
+function formatDateTimeLocal(value: string | null) {
+  const parts = getIstanbulDateTimeParts(value);
+  if (!parts) return "";
+
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
 
 function formatDisplayDate(value: string | null) {
@@ -40,6 +72,7 @@ function formatDisplayDate(value: string | null) {
   return date.toLocaleString("tr-TR", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: ADMIN_TIME_ZONE,
   });
 }
 
@@ -143,12 +176,12 @@ export default async function AnnouncementsPage() {
           </label>
 
           <label style={field}>
-            Başlangıç tarihi
+            Başlangıç tarihi (Türkiye saati)
             <input name="starts_at" type="datetime-local" style={input} />
           </label>
 
           <label style={field}>
-            Bitiş tarihi
+            Bitiş tarihi (Türkiye saati)
             <input name="ends_at" type="datetime-local" style={input} />
           </label>
 
@@ -238,7 +271,7 @@ export default async function AnnouncementsPage() {
                 </label>
 
                 <label style={field}>
-                  Başlangıç tarihi
+                  Başlangıç tarihi (Türkiye saati)
                   <input
                     name="starts_at"
                     type="datetime-local"
@@ -248,7 +281,7 @@ export default async function AnnouncementsPage() {
                 </label>
 
                 <label style={field}>
-                  Bitiş tarihi
+                  Bitiş tarihi (Türkiye saati)
                   <input
                     name="ends_at"
                     type="datetime-local"

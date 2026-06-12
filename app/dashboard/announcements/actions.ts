@@ -9,11 +9,17 @@ function getText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+const ISTANBUL_UTC_OFFSET = "+03:00";
+
 function getNullableDate(formData: FormData, key: string) {
   const value = getText(formData, key);
   if (!value) return null;
 
-  const date = new Date(value);
+  // datetime-local bize timezone olmadan gelir: 2026-06-12T17:48
+  // Admin panelde girilen saati Türkiye saati kabul edip UTC olarak DB'ye kaydediyoruz.
+  const normalizedValue = value.length === 16 ? `${value}:00` : value;
+  const date = new Date(`${normalizedValue}${ISTANBUL_UTC_OFFSET}`);
+
   if (Number.isNaN(date.getTime())) return null;
 
   return date.toISOString();
