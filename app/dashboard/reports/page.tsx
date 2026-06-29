@@ -13,6 +13,30 @@ type ReportRow = {
   value_2: string | null;
 };
 
+type RetentionSummaryRow = {
+  d1_eligible_users: number | null;
+  d1_returned_users: number | null;
+  d1_retention_pct: number | null;
+  d7_eligible_users: number | null;
+  d7_returned_users: number | null;
+  d7_retention_pct: number | null;
+  d30_eligible_users: number | null;
+  d30_returned_users: number | null;
+  d30_retention_pct: number | null;
+  calculated_at: string | null;
+};
+
+type RetentionDailyRow = {
+  cohort_date: string;
+  new_users: number | null;
+  d1_users: number | null;
+  d1_retention_pct: number | null;
+  d7_users: number | null;
+  d7_retention_pct: number | null;
+  d30_users: number | null;
+  d30_retention_pct: number | null;
+};
+
 type SearchParams = {
   start?: string | string[];
   end?: string | string[];
@@ -100,6 +124,30 @@ function normalizeDateRange(params: SearchParams | undefined) {
   }
 
   return { startDate, endDate };
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value == null) return "-";
+
+  return `%${Number(value).toLocaleString("tr-TR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatNumber(value: number | null | undefined) {
+  if (value == null) return "-";
+  return Number(value).toLocaleString("tr-TR");
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+
+  try {
+    return new Date(value).toLocaleString("tr-TR");
+  } catch {
+    return value;
+  }
 }
 
 function getPresetRange(days: number) {
@@ -227,6 +275,25 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     p_end_date: endDate,
   });
 
+  const { data: retentionSummaryData, error: retentionSummaryError } =
+    await supabase
+      .from("analytics_retention_summary")
+      .select("*")
+      .maybeSingle();
+
+  const { data: retentionDailyData, error: retentionDailyError } =
+    await supabase
+      .from("analytics_retention_daily")
+      .select("*")
+      .order("cohort_date", { ascending: false })
+      .limit(30);
+
+  const retentionSummary =
+    retentionSummaryData as RetentionSummaryRow | null;
+
+  const retentionDailyRows =
+    (retentionDailyData ?? []) as RetentionDailyRow[];
+
   const rows: ReportRow[] = ((data ?? []) as ReportRow[])
     .map((row) => ({
       ...row,
@@ -273,9 +340,11 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       </div>
 
       <p style={{ marginTop: 12, maxWidth: 860, lineHeight: 1.6, opacity: 0.8 }}>
-        Bu rapor, seçilen tarih aralığına göre WellShe içindeki event ölçüm sisteminden otomatik hesaplanır. 
-        Tekil değerler, gerçek kişi sayısı değil; install_id bazlı kurulum sinyali olarak değerlendirilmelidir. 
-        Yeni süre ve pratik verileri, mobil güncelleme kullanıcılara ulaştıktan sonra dolmaya başlar.
+        Bu rapor, seçilen tarih aralığına göre WellShe içindeki event ölçüm
+        sisteminden otomatik hesaplanır. Tekil değerler, gerçek kişi sayısı
+        değil; install_id bazlı kurulum sinyali olarak değerlendirilmelidir.
+        Yeni süre ve pratik verileri, mobil güncelleme kullanıcılara ulaştıktan
+        sonra dolmaya başlar.
       </p>
 
       <section style={filterCard}>
@@ -335,6 +404,141 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           Gösterilen aralık: <strong>{startDate}</strong> -{" "}
           <strong>{endDate}</strong>
         </div>
+      </section>
+
+      <section style={retentionSection}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>Kullanıcı Bağlılığı / Retention</h2>
+            <p style={{ margin: "6px 0 0", opacity: 0.72, lineHeight: 1.5 }}>
+              D1, D7 ve D30 değerleri install_id bazlı hesaplanır. Kullanıcının
+              ilk görüldüğü günden sonra tekrar aktif olup olmadığına bakar.
+            </p>
+          </div>
+
+          <div style={{ fontSize: 13, opacity: 0.7 }}>
+            Son hesaplama: {formatDateTime(retentionSummary?.calculated_at)}
+          </div>
+        </div>
+
+        {retentionSummaryError || retentionDailyError ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid #f3b6b6",
+              background: "#fff3f3",
+              color: "#9f1d1d",
+            }}
+          >
+            Retention verisi alınamadı:{" "}
+            {retentionSummaryError?.message ?? retentionDailyError?.message}
+          </div>
+        ) : (
+          <>
+            <div style={metricGrid}>
+              <div style={metricCard}>
+                <div style={metricLabel}>D1 Retention</div>
+                <div style={metricValue}>
+                  {formatPercent(retentionSummary?.d1_retention_pct)}
+                </div>
+                <div style={metricNote}>
+                  {formatNumber(retentionSummary?.d1_returned_users)} /{" "}
+                  {formatNumber(retentionSummary?.d1_eligible_users)} kullanıcı
+                </div>
+              </div>
+
+              <div style={metricCard}>
+                <div style={metricLabel}>D7 Retention</div>
+                <div style={metricValue}>
+                  {formatPercent(retentionSummary?.d7_retention_pct)}
+                </div>
+                <div style={metricNote}>
+                  {formatNumber(retentionSummary?.d7_returned_users)} /{" "}
+                  {formatNumber(retentionSummary?.d7_eligible_users)} kullanıcı
+                </div>
+              </div>
+
+              <div style={metricCard}>
+                <div style={metricLabel}>D30 Retention</div>
+                <div style={metricValue}>
+                  {formatPercent(retentionSummary?.d30_retention_pct)}
+                </div>
+                <div style={metricNote}>
+                  {formatNumber(retentionSummary?.d30_returned_users)} /{" "}
+                  {formatNumber(retentionSummary?.d30_eligible_users)} kullanıcı
+                </div>
+              </div>
+            </div>
+
+            <details style={detailsCard}>
+              <summary style={detailsSummary}>
+                <span>Günlük cohort detayları</span>
+                <span style={detailsSummaryMeta}>Son 30 gün</span>
+              </summary>
+
+              <div style={{ marginTop: 14, overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Cohort Tarihi</th>
+                      <th style={th}>Yeni Kullanıcı</th>
+                      <th style={th}>D1</th>
+                      <th style={th}>D7</th>
+                      <th style={th}>D30</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {retentionDailyRows.length > 0 ? (
+                      retentionDailyRows.map((row) => (
+                        <tr key={row.cohort_date}>
+                          <td style={td}>{row.cohort_date}</td>
+                          <td style={tdStrong}>{formatNumber(row.new_users)}</td>
+                          <td style={td}>
+                            {formatPercent(row.d1_retention_pct)}{" "}
+                            <span style={{ opacity: 0.6 }}>
+                              ({formatNumber(row.d1_users)})
+                            </span>
+                          </td>
+                          <td style={td}>
+                            {formatPercent(row.d7_retention_pct)}{" "}
+                            <span style={{ opacity: 0.6 }}>
+                              ({formatNumber(row.d7_users)})
+                            </span>
+                          </td>
+                          <td style={td}>
+                            {formatPercent(row.d30_retention_pct)}{" "}
+                            <span style={{ opacity: 0.6 }}>
+                              ({formatNumber(row.d30_users)})
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td style={tdMuted}>Veri yok</td>
+                        <td style={tdMuted}>Retention cohort verisi bulunamadı.</td>
+                        <td style={tdMuted}>-</td>
+                        <td style={tdMuted}>-</td>
+                        <td style={tdMuted}>-</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </>
+        )}
       </section>
 
       {error && (
@@ -445,6 +649,46 @@ const filterCard: CSSProperties = {
   background: "#fafafa",
 };
 
+const retentionSection: CSSProperties = {
+  marginTop: 18,
+  padding: 16,
+  borderRadius: 14,
+  border: "1px solid #eee",
+  background: "#fff",
+};
+
+const metricGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+};
+
+const metricCard: CSSProperties = {
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #eee",
+  background: "#fafafa",
+};
+
+const metricLabel: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  opacity: 0.72,
+};
+
+const metricValue: CSSProperties = {
+  marginTop: 8,
+  fontSize: 28,
+  fontWeight: 900,
+  letterSpacing: "-0.03em",
+};
+
+const metricNote: CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  opacity: 0.72,
+};
+
 const labelStyle: CSSProperties = {
   display: "grid",
   gap: 6,
@@ -516,4 +760,28 @@ const tdMuted: CSSProperties = {
   ...td,
   color: "#777",
   background: "#fcfcfc",
+};
+
+const detailsCard: CSSProperties = {
+  marginTop: 18,
+  borderRadius: 14,
+  border: "1px solid #eee",
+  background: "#fafafa",
+  overflow: "hidden",
+};
+
+const detailsSummary: CSSProperties = {
+  padding: "14px 16px",
+  cursor: "pointer",
+  fontWeight: 800,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "center",
+};
+
+const detailsSummaryMeta: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  opacity: 0.6,
 };
