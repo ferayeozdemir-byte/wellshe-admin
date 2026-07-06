@@ -83,6 +83,29 @@ function extFromFilename(name: string) {
   return ext;
 }
 
+function safeBaseNameFromFilename(filename: string, fallback = "asset") {
+  const withoutExt = filename.replace(/\.[^/.]+$/, "");
+
+  const normalized = withoutExt
+    .toLowerCase()
+    .replaceAll("ı", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const slug = normalized
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+
+  return slug || fallback;
+}
+
 function makePath(file: File) {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -95,14 +118,21 @@ function makePath(file: File) {
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const ct = String(file.type || "").toLowerCase();
+  const fileName = String(file.name || "").toLowerCase();
 
   const folder = ct.startsWith("image/")
     ? "covers"
-    : ct.startsWith("audio/") || ct === "video/mp4" || file.name.toLowerCase().endsWith(".mp4")
+    : ct.startsWith("audio/") || ct === "video/mp4" || fileName.endsWith(".mp4")
       ? "audios"
       : "files";
 
-  const path = `${folder}/${yyyy}-${mm}/${id}${ext}`;
+  const fallbackName =
+    folder === "covers" ? "cover" : folder === "audios" ? "audio" : "asset";
+
+  const safeBaseName = safeBaseNameFromFilename(file.name, fallbackName);
+
+  const path = `${folder}/${yyyy}-${mm}/${id.slice(0, 8)}-${safeBaseName}${ext}`;
+
   return { bucket: "media", path };
 }
 
