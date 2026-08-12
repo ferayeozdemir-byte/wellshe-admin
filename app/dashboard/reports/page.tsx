@@ -126,6 +126,64 @@ function normalizeDateRange(params: SearchParams | undefined) {
   return { startDate, endDate };
 }
 
+function dateInputToUtcMs(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
+function buildRetentionSummary(
+  rows: RetentionDailyRow[],
+  calculatedAt: string | null | undefined
+): RetentionSummaryRow {
+  const calculatedDate = calculatedAt?.slice(0, 10);
+  const referenceDate = calculatedDate && isDateInputValue(calculatedDate)
+    ? calculatedDate
+    : new Date().toISOString().slice(0, 10);
+  const referenceMs = dateInputToUtcMs(referenceDate);
+
+  function calculateMetric(
+    elapsedDays: number,
+    usersKey: "d1_users" | "d7_users" | "d30_users"
+  ) {
+    const cutoffMs = referenceMs - elapsedDays * 24 * 60 * 60 * 1000;
+    const eligibleRows = rows.filter(
+      (row) => dateInputToUtcMs(row.cohort_date) <= cutoffMs
+    );
+    const eligibleUsers = eligibleRows.reduce(
+      (total, row) => total + Number(row.new_users ?? 0),
+      0
+    );
+    const returnedUsers = eligibleRows.reduce(
+      (total, row) => total + Number(row[usersKey] ?? 0),
+      0
+    );
+
+    return {
+      eligibleUsers,
+      returnedUsers,
+      retentionPct:
+        eligibleUsers > 0 ? (returnedUsers / eligibleUsers) * 100 : null,
+    };
+  }
+
+  const d1 = calculateMetric(1, "d1_users");
+  const d7 = calculateMetric(7, "d7_users");
+  const d30 = calculateMetric(30, "d30_users");
+
+  return {
+    d1_eligible_users: d1.eligibleUsers,
+    d1_returned_users: d1.returnedUsers,
+    d1_retention_pct: d1.retentionPct,
+    d7_eligible_users: d7.eligibleUsers,
+    d7_returned_users: d7.returnedUsers,
+    d7_retention_pct: d7.retentionPct,
+    d30_eligible_users: d30.eligibleUsers,
+    d30_returned_users: d30.returnedUsers,
+    d30_retention_pct: d30.retentionPct,
+    calculated_at: calculatedAt ?? null,
+  };
+}
+
 function formatPercent(value: number | null | undefined) {
   if (value == null) return "-";
 
@@ -285,14 +343,18 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     await supabase
       .from("analytics_retention_daily")
       .select("*")
+      .gte("cohort_date", startDate)
+      .lte("cohort_date", endDate)
       .order("cohort_date", { ascending: false })
-      .limit(30);
-
-  const retentionSummary =
-    retentionSummaryData as RetentionSummaryRow | null;
+      .limit(1000);
 
   const retentionDailyRows =
     (retentionDailyData ?? []) as RetentionDailyRow[];
+
+  const retentionSummary = buildRetentionSummary(
+    retentionDailyRows,
+    (retentionSummaryData as RetentionSummaryRow | null)?.calculated_at
+  );
 
   const rows: ReportRow[] = ((data ?? []) as ReportRow[])
     .map((row) => ({
@@ -422,6 +484,8 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             <p style={{ margin: "6px 0 0", opacity: 0.72, lineHeight: 1.5 }}>
               D1, D7 ve D30 değerleri install_id bazlı hesaplanır. Kullanıcının
               ilk görüldüğü günden sonra tekrar aktif olup olmadığına bakar.
+              Kartlar, seçilen tarih aralığındaki cohortlardan hesaplanır;
+              yalnızca ilgili gün sayısını doldurmuş cohortlar orana katılır.
             </p>
           </div>
 
@@ -483,7 +547,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             <details style={detailsCard}>
               <summary style={detailsSummary}>
                 <span>Günlük cohort detayları</span>
-                <span style={detailsSummaryMeta}>Son 30 gün</span>
+                <span style={detailsSummaryMeta}>Seçilen tarih aralığı</span>
               </summary>
 
               <div style={{ marginTop: 14, overflowX: "auto" }}>
